@@ -18,16 +18,16 @@ jobs:
           node-version: '24'
 
       - name: Install pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@v3
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install
 
       - name: Build Admin App
         run: pnpm --filter admin build
 
       - name: Build Electron
-        run: pnpm --filter admin build:electron:portable
+        run: cd apps/admin && npx vite build && npx electron-builder --win --publish never
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

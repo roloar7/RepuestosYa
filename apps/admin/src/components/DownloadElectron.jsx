@@ -2,8 +2,8 @@ import { BiDownload } from 'react-icons/bi'
 import styles from './DownloadElectron.module.css'
 
 export default function DownloadElectron() {
-  const GITHUB_REPO = 'https://github.com/TIZIANO/RepuestosYa'
-  const RELEASES_URL = `${GITHUB_REPO}/releases`
+  const GITHUB_REPO = 'https://github.com/roloar7/RepuestosYa'
+  const RELEASES_URL = `${GITHUB_REPO}/releases/`
 
   return (
     <a
@@ -14,7 +14,7 @@ export default function DownloadElectron() {
       title="Descargar versión de escritorio"
     >
       <BiDownload />
-      <span>Descargar Escritorio</span>
+      <span>Descargar version de Escritorio</span>
     </a>
   )
 }

@@ -14,7 +14,7 @@
 }
 
 .button:hover {
-  background-color: var(--admin-color-primary-darker);
+  background-color: var(--admin-color-primary-hover);
   text-decoration: none;
   color: var(--text-dark);
 }

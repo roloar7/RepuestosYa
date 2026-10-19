@@ -1,0 +1,9 @@
+{
+  "name": "@repuestos-ya/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./oxlint": "./oxlint.base.json"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "name": "admin",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Panel de administración RepuestosYa con gestión de impresoras 3D Bambu Lab",
+  "author": "TIZIANO",
+  "type": "module",
+  "main": "src-electron/main.js",
+  "scripts": {
+    "dev": "vite",
+    "dev:electron": "concurrently \"vite\" \"node src-electron/wait-for-vite.js\"",
+    "build": "vite build",
+    "build:electron": "vite build && electron-builder",
+    "build:electron:portable": "vite build && electron-builder --win --publish never -p onTagOrDraft",
+    "lint": "oxlint",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@boxicons/react": "^1.0.3",
+    "@repuestos-ya/supabase": "workspace:*",
+    "@repuestos-ya/ui": "workspace:*",
+    "mqtt": "^5.16.1",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-icons": "^5.7.0",
+    "react-router-dom": "^7.18.4"
+  },
+  "devDependencies": {
+    "@repuestos-ya/config": "workspace:*",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.6",
+    "electron": "^44.9.0",
+    "electron-builder": "^26.15.3",
+    "electron-vite": "^6.0.0",
+    "oxlint": "^1.81.0",
+    "vite": "^8.3.0"
+  }
+}

@@ -1,0 +1,27 @@
+@import "@repuestos-ya/ui/responsive.css";
+@import "@repuestos-ya/ui/tokens.css";
+
+:root {
+  font: 15px/1.5 var(--font-sans);
+  letter-spacing: normal;
+  color-scheme: light;
+  color: var(--color-text);
+  background: var(--admin-bg);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  @media (max-width: 1024px) {
+    font-size: 16px;
+  }
+}
+
+body {
+  margin: 0;
+}
+
+#root {
+  min-height: 100svh;
+  overflow-x: hidden;
+}

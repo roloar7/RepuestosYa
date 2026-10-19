@@ -1,0 +1,19 @@
+appId: com.repuestosya.admin
+productName: RepuestosYa Admin
+directories:
+  buildResources: assets
+  output: dist-build
+
+files:
+  - dist/**/*
+  - src-electron/main.js
+  - src-electron/preload.js
+  - package.json
+  - node_modules/mqtt/**/*
+
+win:
+  target:
+    - portable
+
+portable:
+  artifactName: RepuestosYa-Admin-${version}-portable.exe

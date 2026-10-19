@@ -1,0 +1,101 @@
+:root {
+  /* ── Tipografía ──────────────────────── */
+  --font-sans: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+
+  /* Escala tipográfica fluida (clamp entre sm → xl) */
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
+  --text-md: 0.875rem;
+  --text-base: clamp(0.875rem, 0.85rem + 0.2vw, 1rem);
+  --text-lg: clamp(1rem, 0.95rem + 0.35vw, 1.25rem);
+  --text-xl: clamp(1.25rem, 1.1rem + 0.8vw, 1.75rem);
+  --text-2xl: clamp(1.5rem, 1.25rem + 1.4vw, 2.25rem);
+
+  /* Escala de espaciado fluida */
+  --space-1: 4px;
+  --space-2: clamp(6px, 1vw, 8px);
+  --space-3: clamp(8px, 1.5vw, 12px);
+  --space-4: clamp(12px, 2vw, 16px);
+  --space-5: clamp(16px, 2.5vw, 24px);
+  --space-6: clamp(20px, 3vw, 32px);
+  --space-7: clamp(28px, 4vw, 48px);
+
+  /* ── Marca ───────────────────────────── */
+  --color-primary: #FFE600;
+  --color-primary-hover: #FDC500;
+  --color-primary-active: #E6B300;
+  --color-primary-soft: #FFF6B8;
+  --color-primary-subtle: #FFFBE0;
+
+  --color-secondary: #001D3D;
+  --color-secondary-hover: #00294F;
+  --color-secondary-soft: #E6ECF3;
+
+  /* Accent: azul medio y apagado, para links, íconos y detalles */
+  --color-accent: #3A6EA5;
+  --color-accent-hover: #2F5A89;
+  --color-accent-soft: #DCE8F5;
+
+  /* ── Fondos y superficies ────────────── */
+  --color-bg: #FFFFFF;
+  --color-bg-alt: #F5F7FA;
+  --color-surface: #FFFFFF;
+  --color-surface-muted: #EEF1F6;
+  --color-overlay: rgba(0, 29, 61, 0.55);
+
+  /* ── Texto ───────────────────────────── */
+  --color-text: #0B1B2E;
+  --color-text-secondary: #4A5A70;
+  --color-text-muted: #7A889C;
+  --color-text-on-primary: #001D3D; /* texto sobre amarillo */
+  --color-text-on-secondary: #FFFFFF;
+  --color-link: var(--color-accent);
+  --color-link-hover: var(--color-accent-hover);
+
+  /* ── Bordes ──────────────────────────── */
+  --color-border: #DDE3EB;
+  --color-border-strong: #C3CCD8;
+  --color-border-focus: #001D3D;
+
+  /* ── Estados ─────────────────────────── */
+  --color-success: #2E8B57;
+  --color-success-soft: #E3F4EA;
+  --color-warning: #D97706;
+  --color-warning-soft: #FDF0DC;
+  --color-danger: #C8374A;
+  --color-danger-soft: #FBE6E9;
+  --color-info: #3A6EA5;
+  --color-info-soft: #DCE8F5;
+
+  /* ── Sombras ─────────────────────────── */
+  --shadow-color: 0, 29, 61;
+  --shadow-sm: 0 1px 2px rgba(var(--shadow-color), 0.08);
+  --shadow-md: 0 4px 12px rgba(var(--shadow-color), 0.10);
+  --shadow-lg: 0 12px 32px rgba(var(--shadow-color), 0.14);
+  --shadow-focus: 0 0 0 3px rgba(255, 230, 0, 0.55);
+
+  /* ── Radios ──────────────────────────── */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-full: 999px;
+
+  /* ── Panel de administración ─────────── */
+  --admin-color-primary: #F2E394;
+  --admin-color-primary-hover: #E9D675;
+  --admin-color-primary-active: #DFC95C;
+  --admin-color-primary-soft: #FBF5D3;
+
+  --admin-bg: #F3F5F9;
+  --admin-sidebar-bg: #001D3D;
+  --admin-sidebar-hover: rgba(255, 255, 255, 0.06);
+  --admin-sidebar-active-bg: rgba(255, 230, 0, 0.12);
+  --admin-sidebar-active-text: var(--admin-color-primary);
+  --admin-sidebar-text: #C9D4E3;
+  --admin-sidebar-border: rgba(255, 255, 255, 0.10);
+  --admin-header-bg: #FFFFFF;
+  --admin-table-header-bg: #EEF1F6;
+  --admin-table-row-hover: #F8FAFC;
+  --admin-table-stripe: #FAFBFD;
+}

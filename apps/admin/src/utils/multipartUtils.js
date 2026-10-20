@@ -1,4 +1,4 @@
-import { decompressZip } from './zipUtils'
+import { decompressArchive, detectArchiveType } from './archiveUtils'
 
 /**
  * Descargar múltiples partes ZIP (.zip.001, .zip.002, etc)
@@ -50,10 +50,18 @@ export async function downloadMultipartZip(baseUrl, totalParts, fileName) {
     const zipBlob = new Blob(parts, { type: 'application/zip' })
     console.log(`[multipartUtils] ZIP reensamblado: ${(zipBlob.size / 1024 / 1024).toFixed(2)} MB`)
 
+    // Detectar tipo de archivo (zip, rar, 7z)
+    // Para multipart, detectamos por el primer archivo
+    const archiveType = detectArchiveType(baseUrl)
+    console.log('[multipartUtils] Tipo detectado:', archiveType)
+
     // Descomprimir
     console.log('[multipartUtils] Descomprimiendo...')
-    const files = await decompressZip(zipBlob)
-    console.log('[multipartUtils] Archivos en ZIP:', files.map(f => f.name))
+    const files = await decompressArchive(zipBlob, archiveType)
+    console.log(
+      `[multipartUtils] Archivos en ${archiveType.toUpperCase()}:`,
+      files.map(f => f.name)
+    )
 
     // Buscar el .exe
     const exeFile = files.find(f => f.name === fileName || f.name.endsWith('.exe'))

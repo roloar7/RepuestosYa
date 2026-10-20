@@ -1,12 +1,7 @@
 import { useState, useEffect } from "react"
 import { supabase } from "@repuestos-ya/supabase"
 import { useAppReleaseHistory } from "../../hooks/useAppRelease"
-import {
-  compressToZip,
-  formatBytes,
-  getCompressionRatio,
-  detectArchiveType,
-} from "../../utils/archiveUtils"
+import { compressToZip, formatBytes, getCompressionRatio } from "../../utils/zipUtils"
 import styles from "./GestionarReleases.module.css"
 
 /**
@@ -314,12 +309,12 @@ export default function GestionarReleases() {
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="file">Archivo(s) (.zip, .rar, .7z o partes .001, .002, etc)</label>
+              <label htmlFor="file">Archivo(s) (.zip o .zip.001, .zip.002, etc)</label>
               <input
                 id="file"
                 type="file"
                 onChange={handleFileSelect}
-                accept=".zip,.rar,.7z,.exe,.dmg,.AppImage"
+                accept=".zip,.exe,.dmg,.AppImage"
                 multiple
                 disabled={uploading}
               />

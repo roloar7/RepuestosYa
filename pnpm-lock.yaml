@@ -29,9 +29,6 @@ importers:
       mqtt:
         specifier: ^5.16.1
         version: 5.16.1
-      rarjs:
-        specifier: ^0.0.2
-        version: 0.0.2
       react:
         specifier: ^19.2.8
         version: 19.3.0
@@ -1532,9 +1529,6 @@ packages:
   quick-lru@5.1.1:
     resolution: {integrity: sha512-WuyALRjWPDGtt/wzJiadO5AXY+8hZ80hVpe6MyivgraREW751X3SbhRvG3eLKOYN+8VEvqLcf3wdnt44Z4S4SA==}
     engines: {node: '>=10'}
-
-  rarjs@0.0.2:
-    resolution: {integrity: sha512-q3gNgQfIrHdySXLuvFod0GSxnjBEiz2u9v0/+zXgyxKiOjZSh+T1Rujg4PYoU9CElJWVwi0elDPABtJi8wM4/A==}
 
   react-dom@19.3.0:
     resolution: {integrity: sha512-JDk8dgif51OjFoDE70+OT9ICyYr+69HlmihNwp1+Nsfbna3t5sIiCa9ZJktDmQ4/1b/rn26hIAR2uYXDMr5r0Q==}
@@ -3450,8 +3444,6 @@ snapshots:
   pvutils@1.2.0: {}
 
   quick-lru@5.1.1: {}
-
-  rarjs@0.0.2: {}
 
   react-dom@19.3.0(react@19.3.0):
     dependencies:

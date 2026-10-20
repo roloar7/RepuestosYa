@@ -39,6 +39,8 @@ export function useAppRelease() {
         }
 
         // Obtener la versión más reciente para esta plataforma
+        console.log("[useAppRelease] Buscando release para plataforma:", platform)
+        
         const { data, error: err } = await supabase
           .from("app_releases")
           .select("*")
@@ -48,16 +50,30 @@ export function useAppRelease() {
 
         if (err) {
           if (err.code === "PGRST116") {
-            // No rows found: normal, solo no hay release para esta plataforma
+            // No rows found
             console.warn("[useAppRelease] No release found for platform:", platform)
+            
+            // Intentar obtener ANY release para debug
+            const { data: allReleases } = await supabase
+              .from("app_releases")
+              .select("version, platform, is_latest, total_parts")
+              .eq("platform", platform)
+            
+            console.log("[useAppRelease] Releases para plataforma (todas):", allReleases)
+            
+            if (allReleases && allReleases.length > 0) {
+              console.warn("[useAppRelease] ⚠️ Existen releases pero NINGUNA tiene is_latest=true")
+              setError(`Releases encontradas pero ninguna marcada como "latest". Marcar una en admin panel.`)
+            } else {
+              setError("No hay versión disponible aún")
+            }
             setRelease(null)
-            setError("No hay versión disponible aún")
           } else {
             console.error("[useAppRelease] DB Error:", err)
             setError(err.message || "Error al obtener release")
           }
         } else if (data) {
-          console.log("[useAppRelease] Release found:", data.version)
+          console.log("[useAppRelease] Release found:", data.version, "total_parts:", data.total_parts)
           setRelease(data)
         } else {
           console.warn("[useAppRelease] No data returned")

@@ -1,4 +1,4 @@
-import { decompressArchive, detectArchiveType } from './archiveUtils'
+import { decompressZip } from './zipUtils'
 
 /**
  * Descargar ZIP desde URL, descomprimir y ejecutar descarga del .exe
@@ -18,16 +18,9 @@ export async function downloadAndExtractZip(downloadUrl, fileName) {
     const zipBlob = await response.blob()
     console.log('[downloadUtils] ZIP descargado:', zipBlob.size, 'bytes')
 
-    // Detectar tipo de archivo
-    const archiveType = detectArchiveType(downloadUrl)
-    console.log('[downloadUtils] Tipo detectado:', archiveType)
-
     // Descomprimir
-    const files = await decompressArchive(zipBlob, archiveType)
-    console.log(
-      `[downloadUtils] Archivos en ${archiveType.toUpperCase()}:`,
-      files.map(f => f.name)
-    )
+    const files = await decompressZip(zipBlob)
+    console.log('[downloadUtils] Archivos en ZIP:', files.map(f => f.name))
 
     // Buscar el .exe
     const exeFile = files.find(f => f.name === fileName || f.name.endsWith('.exe'))

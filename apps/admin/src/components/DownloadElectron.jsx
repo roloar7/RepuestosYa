@@ -1,39 +1,11 @@
 import { BiDownload } from 'react-icons/bi'
 import { useAppRelease } from '../hooks/useAppRelease'
-import { downloadAndExtractZip } from '../utils/downloadUtils'
-import { downloadMultipartZip } from '../utils/multipartUtils'
 import styles from './DownloadElectron.module.css'
 
 export default function DownloadElectron() {
-  const { _release, loading, error, downloadUrl, version, isAuthenticated } = useAppRelease()
+  const { loading, error, downloadUrl, version, isAuthenticated } = useAppRelease()
 
-  const handleDownload = (e) => {
-    e.preventDefault()
-    if (!downloadUrl || !version) return
 
-    // Nombre del .exe esperado dentro del ZIP
-    const exeFileName = `RepuestosYa-Admin-${version}.exe`
-
-    // Detectar si es multipart (.zip.001, .zip.002, etc) o monolítico
-    const totalParts = _release?.total_parts || 1
-
-    console.log('[DownloadElectron] Release data:', {
-      version,
-      downloadUrl,
-      totalParts,
-      release: _release
-    })
-
-    if (totalParts > 1) {
-      // Descargar múltiples partes
-      console.log(`[DownloadElectron] Descargando ${totalParts} partes...`)
-      downloadMultipartZip(downloadUrl, totalParts, exeFileName)
-    } else {
-      // Descargar archivo único
-      console.log('[DownloadElectron] Descargando archivo único...')
-      downloadAndExtractZip(downloadUrl, exeFileName)
-    }
-  }
 
   if (loading) {
     return (
@@ -79,21 +51,15 @@ export default function DownloadElectron() {
   }
 
   // Versión disponible y autenticado ✅
-  const parts = _release?.total_parts || 1
-  const tooltip =
-    parts > 1
-      ? `Descargar v${version} (${parts} partes, se descargan y descomponen automáticamente)`
-      : `Descargar v${version} (ZIP comprimido, se extrae automáticamente)`
-
   return (
-    <button
-      type="button"
+    <a
+      href={downloadUrl}
       className={styles.button}
-      onClick={handleDownload}
-      title={tooltip}
+      title={`Descargar v${version}`}
+      download
     >
       <BiDownload />
       <span>Descargar {version && `v${version}`}</span>
-    </button>
+    </a>
   )
 }

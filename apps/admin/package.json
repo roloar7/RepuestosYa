@@ -19,7 +19,6 @@
     "@boxicons/react": "^1.0.3",
     "@repuestos-ya/supabase": "workspace:*",
     "@repuestos-ya/ui": "workspace:*",
-    "jszip": "^3.10.2",
     "mqtt": "^5.16.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

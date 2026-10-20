@@ -3,7 +3,7 @@ import styles from './DownloadElectron.module.css'
 
 export default function DownloadElectron() {
   const GITHUB_REPO = 'https://github.com/roloar7/RepuestosYa'
-  const RELEASES_URL = `${GITHUB_REPO}/releases/`
+  const RELEASES_URL = `${GITHUB_REPO}/releases/download/v1.0.0/RepuestosYa-Admin-1.0.0-portable.exe`
 
   return (
     <a

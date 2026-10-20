@@ -4,6 +4,7 @@ import styles from "./AddPrinterModal.module.css"
 export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
   const [name, setName] = useState("")
   const [ip, setIp] = useState("")
+  const [accessCode, setAccessCode] = useState("")
   const [error, setError] = useState(null)
 
   const handleSubmit = async (event) => {
@@ -20,17 +21,18 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
       return
     }
 
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$/
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$|^[a-zA-Z0-9.-]+\.ts\.net$/
     if (!ipRegex.test(ip.trim())) {
-      setError("IP inválida (ej: 192.168.1.100)")
+      setError("IP o dominio Tailscale inválido (ej: 192.168.1.100 o printer.ts.net)")
       return
     }
 
-    const { success, error: submitError } = await onSubmit(name, ip)
+    const { success, error: submitError } = await onSubmit(name, ip, accessCode)
 
     if (success) {
       setName("")
       setIp("")
+      setAccessCode("")
       setError(null)
       onClose()
     } else {
@@ -41,6 +43,7 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
   const handleClose = () => {
     setName("")
     setIp("")
+    setAccessCode("")
     setError(null)
     onClose()
   }
@@ -80,19 +83,37 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
 
           <div className={styles.field}>
             <label htmlFor="printer-ip" className={styles.label}>
-              Dirección IP
+              Dirección IP o Tailscale DNS
             </label>
             <input
               id="printer-ip"
               type="text"
               className={styles.input}
-              placeholder="ej: 192.168.1.100"
+              placeholder="ej: 192.168.1.100 o printer-1.tailxxx.ts.net"
               value={ip}
               onChange={(e) => setIp(e.target.value)}
               disabled={loading}
             />
             <p className={styles.hint}>
-              IP local de la impresora en la LAN (ej: 192.168.x.x)
+              IP local (192.168.x.x) o nombre Tailscale MagicDNS (printer.ts.net)
+            </p>
+          </div>
+
+          <div className={styles.field}>
+            <label htmlFor="printer-access-code" className={styles.label}>
+              Código de Acceso MQTT (opcional)
+            </label>
+            <input
+              id="printer-access-code"
+              type="password"
+              className={styles.input}
+              placeholder="ej: 0000 (si la impresora lo requiere)"
+              value={accessCode}
+              onChange={(e) => setAccessCode(e.target.value)}
+              disabled={loading}
+            />
+            <p className={styles.hint}>
+              Código de 4 dígitos de Bambu Lab si es requerido
             </p>
           </div>
 

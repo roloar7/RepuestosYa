@@ -6,8 +6,9 @@ import { contextBridge, ipcRenderer } from "electron"
  */
 contextBridge.exposeInMainWorld("electron", {
   bridge: {
-    validatePrinter: (name, ip) =>
-      ipcRenderer.invoke("bridge:validate-printer", name, ip),
+    validatePrinter: (name, ip, accessCode) =>
+      ipcRenderer.invoke("bridge:validate-printer", name, ip, accessCode),
     health: () => ipcRenderer.invoke("bridge:health"),
+    tailscaleStatus: () => ipcRenderer.invoke("bridge:tailscale-status"),
   },
 })

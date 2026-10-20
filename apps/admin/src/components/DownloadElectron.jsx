@@ -17,6 +17,13 @@ export default function DownloadElectron() {
     // Detectar si es multipart (.zip.001, .zip.002, etc) o monolítico
     const totalParts = _release?.total_parts || 1
 
+    console.log('[DownloadElectron] Release data:', {
+      version,
+      downloadUrl,
+      totalParts,
+      release: _release
+    })
+
     if (totalParts > 1) {
       // Descargar múltiples partes
       console.log(`[DownloadElectron] Descargando ${totalParts} partes...`)

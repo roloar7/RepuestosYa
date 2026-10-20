@@ -43,7 +43,7 @@ export function useAppRelease() {
         
         const { data, error: err } = await supabase
           .from("app_releases")
-          .select("*")
+          .select("id, version, platform, download_url, total_parts, file_size_bytes, original_size_bytes, sha256_checksum, release_notes, is_latest")
           .eq("platform", platform)
           .eq("is_latest", true)
           .single()
@@ -73,7 +73,12 @@ export function useAppRelease() {
             setError(err.message || "Error al obtener release")
           }
         } else if (data) {
-          console.log("[useAppRelease] Release found:", data.version, "total_parts:", data.total_parts)
+          console.log("[useAppRelease] Release found:", {
+            version: data.version,
+            total_parts: data.total_parts,
+            download_url: data.download_url,
+            file_size_bytes: data.file_size_bytes
+          })
           setRelease(data)
         } else {
           console.warn("[useAppRelease] No data returned")

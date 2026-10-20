@@ -17,7 +17,11 @@ export async function downloadMultipartZip(baseUrl, totalParts, fileName) {
     // Descargar cada parte
     for (let i = 1; i <= totalParts; i++) {
       const partNumber = String(i).padStart(3, '0')
-      const partUrl = `${baseUrl}.${partNumber}`
+      // Si baseUrl termina en .001, reemplazar por el número actual
+      // Si no, concatenar directamente
+      const partUrl = baseUrl.endsWith('.001') 
+        ? baseUrl.replace(/\.001$/, `.${partNumber}`)
+        : `${baseUrl}.${partNumber}`
 
       console.log(`[multipartUtils] Descargando parte ${i}/${totalParts}: ${partUrl}`)
 

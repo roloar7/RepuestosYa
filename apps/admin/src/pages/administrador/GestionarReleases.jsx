@@ -53,7 +53,7 @@ export default function GestionarReleases() {
 
       // Subir archivo a Supabase Storage
       const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.exe`
-      const { data: uploadData, error: uploadError } = await supabase.storage
+      const { data: _uploadData, error: uploadError } = await supabase.storage
         .from("app-releases")
         .upload(fileName, selectedFile, {
           upsert: true,
@@ -80,7 +80,7 @@ export default function GestionarReleases() {
       }
 
       // Insertar o actualizar release en BD
-      const { data: releaseData, error: dbError } = await supabase
+      const { data: _releaseData, error: dbError } = await supabase
         .from("app_releases")
         .upsert({
           version: formData.version,

@@ -3,7 +3,7 @@ import { useAppRelease } from '../hooks/useAppRelease'
 import styles from './DownloadElectron.module.css'
 
 export default function DownloadElectron() {
-  const { release, loading, error, downloadUrl, version } = useAppRelease()
+  const { _release, loading, error, downloadUrl, version } = useAppRelease()
 
   if (loading) {
     return (

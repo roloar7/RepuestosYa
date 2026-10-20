@@ -1,0 +1,14 @@
+[build]
+  command = "pnpm --filter admin build"
+  publish = "apps/admin/dist"
+
+[build.environment]
+  NODE_VERSION = "24"
+  PNPM_VERSION = "11.1.1"
+  ELECTRON_SKIP_BINARY_DOWNLOAD = "1"
+
+# SPA: React Router necesita que todas las rutas sirvan index.html
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

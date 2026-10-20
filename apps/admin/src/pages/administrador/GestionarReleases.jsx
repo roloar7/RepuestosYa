@@ -20,7 +20,7 @@ export default function GestionarReleases() {
     releaseNotes: "",
     isLatest: false,
   })
-  const [selectedFile, setSelectedFile] = useState(null)
+  const [selectedFiles, setSelectedFiles] = useState([])
   const [uploadStatus, setUploadStatus] = useState(null)
 
   // Verificar que el usuario está autenticado
@@ -42,9 +42,11 @@ export default function GestionarReleases() {
 
   // Handlers
   const handleFileSelect = (e) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      setSelectedFile(file)
+    const files = Array.from(e.target.files || [])
+    if (files.length > 0) {
+      // Ordenar por nombre (para que .001, .002, etc estén en orden)
+      files.sort((a, b) => a.name.localeCompare(b.name))
+      setSelectedFiles(files)
       setUploadStatus(null)
     }
   }
@@ -60,8 +62,8 @@ export default function GestionarReleases() {
   const handleSubmit = async (e) => {
     e.preventDefault()
 
-    if (!selectedFile) {
-      setUploadStatus({ error: "Selecciona un archivo" })
+    if (selectedFiles.length === 0) {
+      setUploadStatus({ error: "Selecciona uno o más archivos (.zip o .zip.001, .zip.002, etc)" })
       return
     }
 
@@ -72,77 +74,155 @@ export default function GestionarReleases() {
 
     try {
       setUploading(true)
-      setUploadStatus({ message: "Comprimiendo archivo..." })
 
-      // Comprimir archivo a ZIP
-      const exeFileName = `RepuestosYa-Admin-${formData.version}.exe`
-      const zipBlob = await compressToZip(selectedFile, exeFileName)
+      // Detectar si es monolítico (.zip) o multipart (.zip.001, .zip.002, etc)
+      const isMultipart = selectedFiles[0].name.match(/\.zip\.\d{3}$/)
+      const totalParts = selectedFiles.length
 
-      const originalSize = selectedFile.size
-      const compressedSize = zipBlob.size
-      const ratio = getCompressionRatio(originalSize, compressedSize)
-
-      console.log(
-        `[Upload] Original: ${formatBytes(originalSize)}, Compressed: ${formatBytes(compressedSize)}, Ratio: ${ratio}%`
-      )
-
-      setUploadStatus({
-        message: `Archivo comprimido: ${formatBytes(originalSize)} → ${formatBytes(compressedSize)} (${ratio}% reducción)`,
-      })
-
-      // Subir archivo ZIP a Supabase Storage
-      const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.zip`
-      const { data: _uploadData, error: uploadError } = await supabase.storage
-        .from("app-releases")
-        .upload(fileName, zipBlob, {
-          upsert: true,
-          contentType: 'application/zip',
+      if (isMultipart) {
+        setUploadStatus({
+          message: `Subiendo ${totalParts} partes (${selectedFiles
+            .reduce((sum, f) => sum + f.size, 0) / 1024 / 1024
+            .toFixed(2)} MB total)...`,
         })
-
-      if (uploadError) throw uploadError
-
-      setUploadStatus({ message: "Guardando en BD..." })
-
-      // Obtener URL pública
-      const { data: publicUrl } = supabase.storage
-        .from("app-releases")
-        .getPublicUrl(fileName)
-
-      // Calcular SHA256 del ZIP
-      const sha256 = await calculateSHA256(zipBlob)
-
-      setUploadStatus({ message: "Guardando en BD..." })
-
-      // Si es la versión más reciente, actualizar otros releases
-      if (formData.isLatest) {
-        await supabase
-          .from("app_releases")
-          .update({ is_latest: false })
-          .eq("platform", formData.platform)
+      } else {
+        setUploadStatus({ message: "Comprimiendo/subiendo archivo..." })
       }
 
-      // Insertar o actualizar release en BD
-      const { data: _releaseData, error: dbError } = await supabase
-        .from("app_releases")
-        .upsert({
-          version: formData.version,
-          platform: formData.platform,
-          download_url: publicUrl.publicUrl,
-          file_size_bytes: compressedSize,
-          original_size_bytes: originalSize,
-          sha256_checksum: sha256,
-          release_notes: formData.releaseNotes,
-          is_latest: formData.isLatest,
+      let uploadedUrls = []
+      let totalSize = 0
+
+      if (isMultipart) {
+        // Subir múltiples partes
+        for (let i = 0; i < selectedFiles.length; i++) {
+          const file = selectedFiles[i]
+          const partNumber = String(i + 1).padStart(3, '0')
+          const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.zip.${partNumber}`
+
+          setUploadStatus({
+            message: `Subiendo parte ${i + 1}/${selectedFiles.length}...`,
+          })
+
+          const { error: uploadError } = await supabase.storage
+            .from("app-releases")
+            .upload(fileName, file, {
+              upsert: true,
+              contentType: 'application/octet-stream',
+            })
+
+          if (uploadError) throw uploadError
+
+          const { data: publicUrl } = supabase.storage
+            .from("app-releases")
+            .getPublicUrl(fileName)
+
+          uploadedUrls.push(publicUrl.publicUrl)
+          totalSize += file.size
+
+          console.log(`[Upload] Parte ${i + 1} subida: ${formatBytes(file.size)}`)
+        }
+
+        // URL base (sin la extensión .001)
+        const baseUrl = uploadedUrls[0].replace(/\.001$/, '')
+        const sha256 = 'multipart-' + selectedFiles.length // Placeholder
+
+        setUploadStatus({ message: "Guardando en BD..." })
+
+        // Guardar en BD
+        const { data: _releaseData, error: dbError } = await supabase
+          .from("app_releases")
+          .upsert({
+            version: formData.version,
+            platform: formData.platform,
+            download_url: baseUrl,
+            file_size_bytes: totalSize,
+            original_size_bytes: totalSize, // No sabemos el original, es ZIP parcial
+            total_parts: totalParts,
+            sha256_checksum: sha256,
+            release_notes: formData.releaseNotes,
+            is_latest: formData.isLatest,
+          })
+          .select()
+          .single()
+
+        if (dbError) throw dbError
+
+        setUploadStatus({
+          success: true,
+          message: `✅ Release v${formData.version} publicada (${totalParts} partes, ${formatBytes(totalSize)} total)`,
         })
-        .select()
-        .single()
+      } else {
+        // Subir archivo único
+        const selectedFile = selectedFiles[0]
 
-      if (dbError) throw dbError
+        const exeFileName = `RepuestosYa-Admin-${formData.version}.exe`
+        const zipBlob = await compressToZip(selectedFile, exeFileName)
 
-      setUploadStatus({
-        success: true,
-        message: `✅ Release v${formData.version} publicada exitosamente`,
-      })
+        const originalSize = selectedFile.size
+        const compressedSize = zipBlob.size
+        const ratio = getCompressionRatio(originalSize, compressedSize)
+
+        console.log(
+          `[Upload] Original: ${formatBytes(originalSize)}, Compressed: ${formatBytes(compressedSize)}, Ratio: ${ratio}%`
+        )
+
+        setUploadStatus({
+          message: `Archivo comprimido: ${formatBytes(originalSize)} → ${formatBytes(compressedSize)} (${ratio}% reducción)`,
+        })
+
+        // Subir archivo ZIP a Supabase Storage
+        const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.zip`
+        const { data: _uploadData, error: uploadError } = await supabase.storage
+          .from("app-releases")
+          .upload(fileName, zipBlob, {
+            upsert: true,
+            contentType: 'application/zip',
+          })
+
+        if (uploadError) throw uploadError
+
+        setUploadStatus({ message: "Guardando en BD..." })
+
+        // Obtener URL pública
+        const { data: publicUrl } = supabase.storage
+          .from("app-releases")
+          .getPublicUrl(fileName)
+
+        // Calcular SHA256 del ZIP
+        const sha256 = await calculateSHA256(zipBlob)
+
+        // Si es la versión más reciente, actualizar otros releases
+        if (formData.isLatest) {
+          await supabase
+            .from("app_releases")
+            .update({ is_latest: false })
+            .eq("platform", formData.platform)
+        }
+
+        // Insertar o actualizar release en BD
+        const { data: _releaseData, error: dbError } = await supabase
+          .from("app_releases")
+          .upsert({
+            version: formData.version,
+            platform: formData.platform,
+            download_url: publicUrl.publicUrl,
+            file_size_bytes: compressedSize,
+            original_size_bytes: originalSize,
+            total_parts: 1,
+            sha256_checksum: sha256,
+            release_notes: formData.releaseNotes,
+            is_latest: formData.isLatest,
+          })
+          .select()
+          .single()
+
+        if (dbError) throw dbError
+
+        setUploadStatus({
+          success: true,
+          message: `✅ Release v${formData.version} publicada exitosamente`,
+        })
+      }
 
       // Limpiar formulario
       setFormData({
@@ -151,7 +231,7 @@ export default function GestionarReleases() {
         releaseNotes: "",
         isLatest: false,
       })
-      setSelectedFile(null)
+      setSelectedFiles([])
 
       // Refetch releases
       setTimeout(() => window.location.reload(), 1000)
@@ -229,18 +309,29 @@ export default function GestionarReleases() {
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="file">Archivo (.exe, .dmg, .AppImage)</label>
+              <label htmlFor="file">Archivo(s) (.zip o .zip.001, .zip.002, etc)</label>
               <input
                 id="file"
                 type="file"
                 onChange={handleFileSelect}
-                accept=".exe,.dmg,.AppImage"
+                accept=".zip,.exe,.dmg,.AppImage"
+                multiple
                 disabled={uploading}
               />
-              {selectedFile && (
-                <p className={styles.hint}>
-                  📦 {selectedFile.name} ({(selectedFile.size / 1024 / 1024).toFixed(2)} MB)
-                </p>
+              {selectedFiles.length > 0 && (
+                <div className={styles.fileList}>
+                  <p className={styles.hint}>
+                    📦 {selectedFiles.length} archivo(s) seleccionado(s):{' '}
+                    {(selectedFiles.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                  <ul className={styles.fileItems}>
+                    {selectedFiles.map((f, idx) => (
+                      <li key={idx}>
+                        {f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
 
@@ -286,7 +377,7 @@ export default function GestionarReleases() {
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={uploading || !selectedFile}
+              disabled={uploading || selectedFiles.length === 0}
             >
               {uploading ? "Subiendo..." : "Publicar Release"}
             </button>

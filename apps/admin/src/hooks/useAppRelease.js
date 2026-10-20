@@ -16,6 +16,7 @@ export function useAppRelease() {
     async function fetchLatestRelease() {
       try {
         setLoading(true)
+        setError(null)
 
         // Verificar si está autenticado
         const { data: sessionData } = await supabase.auth.getSession()
@@ -24,7 +25,8 @@ export function useAppRelease() {
         setIsAuthenticated(authenticated)
 
         if (!authenticated) {
-          setError("Debes estar autenticado para descargar")
+          // No es error, simplemente no está autenticado
+          setLoading(false)
           return
         }
 
@@ -32,6 +34,7 @@ export function useAppRelease() {
         const platform = getPlatform()
         if (!platform) {
           setError("Plataforma no soportada")
+          setLoading(false)
           return
         }
 
@@ -43,19 +46,20 @@ export function useAppRelease() {
           .eq("is_latest", true)
           .single()
 
-        if (err && err.code !== "PGRST116") {
-          // PGRST116 = no rows found (normal si no hay release)
-          throw err
-        }
-
-        if (data) {
+        if (err) {
+          if (err.code === "PGRST116") {
+            // No rows found: normal, solo no hay release para esta plataforma
+            setRelease(null)
+          } else {
+            console.error("[useAppRelease] DB Error:", err)
+            setError(err.message || "Error al obtener release")
+          }
+        } else if (data) {
           setRelease(data)
-        } else {
-          setError("No hay versión disponible para tu plataforma")
         }
       } catch (err) {
-        console.error("[useAppRelease] Error:", err)
-        setError(err.message)
+        console.error("[useAppRelease] Unexpected error:", err)
+        setError(err.message || "Error inesperado")
       } finally {
         setLoading(false)
       }
@@ -101,6 +105,7 @@ export function useAppReleaseHistory() {
     async function fetchReleases() {
       try {
         setLoading(true)
+        setError(null)
 
         // Verificar si está autenticado
         const { data: sessionData } = await supabase.auth.getSession()
@@ -109,13 +114,14 @@ export function useAppReleaseHistory() {
         setIsAuthenticated(authenticated)
 
         if (!authenticated) {
-          setError("Debes estar autenticado para ver el historial")
+          setLoading(false)
           return
         }
 
         const platform = getPlatform()
         if (!platform) {
           setError("Plataforma no soportada")
+          setLoading(false)
           return
         }
 
@@ -125,11 +131,15 @@ export function useAppReleaseHistory() {
           .eq("platform", platform)
           .order("created_at", { ascending: false })
 
-        if (err) throw err
-        setReleases(data || [])
+        if (err) {
+          console.error("[useAppReleaseHistory] DB Error:", err)
+          setError(err.message || "Error al obtener historial")
+        } else {
+          setReleases(data || [])
+        }
       } catch (err) {
-        console.error("[useAppReleaseHistory] Error:", err)
-        setError(err.message)
+        console.error("[useAppReleaseHistory] Unexpected error:", err)
+        setError(err.message || "Error inesperado")
       } finally {
         setLoading(false)
       }

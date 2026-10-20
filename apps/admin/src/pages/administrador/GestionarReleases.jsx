@@ -8,9 +8,19 @@ import styles from "./GestionarReleases.module.css"
  * Solo accesible a usuarios autenticados (RLS lo protege en BD)
  */
 export default function GestionarReleases() {
+  // Todos los hooks antes de cualquier return/condicional
   const { releases, loading: historyLoading, error: historyError, isAuthenticated } = useAppReleaseHistory()
   const [isAdmin, setIsAdmin] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
+  const [uploading, setUploading] = useState(false)
+  const [formData, setFormData] = useState({
+    version: "",
+    platform: "windows",
+    releaseNotes: "",
+    isLatest: false,
+  })
+  const [selectedFile, setSelectedFile] = useState(null)
+  const [uploadStatus, setUploadStatus] = useState(null)
 
   // Verificar que el usuario está autenticado
   useEffect(() => {
@@ -29,39 +39,7 @@ export default function GestionarReleases() {
     checkAuth()
   }, [])
 
-  if (checkingAuth || !isAuthenticated) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.errorContainer}>
-          <p className={styles.errorText}>
-            ⚠️ Debes estar autenticado para acceder a esta página
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  if (!isAdmin) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.errorContainer}>
-          <p className={styles.errorText}>
-            🔒 Solo administradores pueden gestionar releases
-          </p>
-        </div>
-      </div>
-    )
-  }
-  const [uploading, setUploading] = useState(false)
-  const [formData, setFormData] = useState({
-    version: "",
-    platform: "windows",
-    releaseNotes: "",
-    isLatest: false,
-  })
-  const [selectedFile, setSelectedFile] = useState(null)
-  const [uploadStatus, setUploadStatus] = useState(null)
-
+  // Handlers
   const handleFileSelect = (e) => {
     const file = e.target.files?.[0]
     if (file) {
@@ -164,6 +142,33 @@ export default function GestionarReleases() {
     }
   }
 
+  // Mostrar error si no está autenticado
+  if (checkingAuth || !isAuthenticated) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <p className={styles.errorText}>
+            ⚠️ Debes estar autenticado para acceder a esta página
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Mostrar error si no es admin
+  if (!isAdmin) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <p className={styles.errorText}>
+            🔒 Solo administradores pueden gestionar releases
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // Render del componente (solo si está autenticado y es admin)
   return (
     <div className={styles.container}>
       <h2 className={styles.title}>Gestionar Releases</h2>

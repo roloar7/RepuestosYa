@@ -46,21 +46,30 @@ export function usePrinters(userId) {
 
     fetchPrinters()
 
-    // Suscribirse a cambios en tiempo real (Supabase Realtime)
-    const subscription = supabase
-      .from("printers")
-      .on("*", (payload) => {
-        console.log("[Realtime] Printer update:", payload)
-        if (!cancelled) {
-          // Refetch printers cuando hay cambios
-          fetchPrinters()
+    // Suscribirse a cambios en tiempo real (Supabase Realtime v2)
+    const channel = supabase
+      .channel(`printers-${userId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "printers",
+          filter: `user_id=eq.${userId}`,
+        },
+        (_payload) => {
+          console.log("[Realtime] Printer update")
+          if (!cancelled) {
+            // Refetch printers cuando hay cambios
+            fetchPrinters()
+          }
         }
-      })
+      )
       .subscribe()
 
     return () => {
       cancelled = true
-      subscription.unsubscribe()
+      channel.unsubscribe()
     }
   }, [userId])
 

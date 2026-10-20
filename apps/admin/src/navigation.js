@@ -26,6 +26,13 @@ export const navSections = [
       { to: "/configuracion", label: "Configuración", icon: "settings", disabled: true },
     ],
   },
+  {
+    id: "administrador",
+    label: "Administrador",
+    items: [
+      { to: "/administrador/releases", label: "Gestionar Releases", icon: "download" },
+    ],
+  },
 ]
 
 function matches(item, pathname) {

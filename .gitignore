@@ -11,9 +11,14 @@ node_modules
 dist
 dist-ssr
 dist-build
+out
 *.local
 .env
-out
+
+# Electron build artifacts
+*.asar
+*.7z.tmp
+*.exe
 
 # Editor directories and files
 .vscode/*

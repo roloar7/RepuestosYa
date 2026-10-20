@@ -1,13 +1,57 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { supabase } from "@repuestos-ya/supabase"
 import { useAppReleaseHistory } from "../../hooks/useAppRelease"
 import styles from "./GestionarReleases.module.css"
 
 /**
  * Componente admin para gestionar releases de la app desde Supabase Storage
+ * Solo accesible a usuarios autenticados (RLS lo protege en BD)
  */
 export default function GestionarReleases() {
-  const { releases, loading, error } = useAppReleaseHistory()
+  const { releases, loading: historyLoading, error: historyError, isAuthenticated } = useAppReleaseHistory()
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [checkingAuth, setCheckingAuth] = useState(true)
+
+  // Verificar que el usuario está autenticado
+  useEffect(() => {
+    async function checkAuth() {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession()
+        setIsAdmin(!!sessionData?.session)
+      } catch (err) {
+        console.error("Auth check error:", err)
+        setIsAdmin(false)
+      } finally {
+        setCheckingAuth(false)
+      }
+    }
+
+    checkAuth()
+  }, [])
+
+  if (checkingAuth || !isAuthenticated) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <p className={styles.errorText}>
+            ⚠️ Debes estar autenticado para acceder a esta página
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className={styles.container}>
+        <div className={styles.errorContainer}>
+          <p className={styles.errorText}>
+            🔒 Solo administradores pueden gestionar releases
+          </p>
+        </div>
+      </div>
+    )
+  }
   const [uploading, setUploading] = useState(false)
   const [formData, setFormData] = useState({
     version: "",
@@ -227,10 +271,10 @@ export default function GestionarReleases() {
         <div className={styles.historySection}>
           <h3>Historial de versiones</h3>
 
-          {loading ? (
+          {historyLoading ? (
             <p>Cargando...</p>
-          ) : error ? (
-            <p className={styles.error}>{error}</p>
+          ) : historyError ? (
+            <p className={styles.error}>{historyError}</p>
           ) : releases.length === 0 ? (
             <p>Sin releases publicadas</p>
           ) : (

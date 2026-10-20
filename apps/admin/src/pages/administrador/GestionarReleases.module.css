@@ -4,6 +4,21 @@
   margin: 0 auto;
 }
 
+.errorContainer {
+  background: #ffebee;
+  border: 1px solid #ef5350;
+  border-radius: 0.5rem;
+  padding: 2rem;
+  text-align: center;
+}
+
+.errorText {
+  color: #c62828;
+  font-weight: 500;
+  font-size: 1.125rem;
+  margin: 0;
+}
+
 .title {
   font-size: 1.75rem;
   font-weight: 600;

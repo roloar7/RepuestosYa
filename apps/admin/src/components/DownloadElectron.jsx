@@ -3,7 +3,7 @@ import { useAppRelease } from '../hooks/useAppRelease'
 import styles from './DownloadElectron.module.css'
 
 export default function DownloadElectron() {
-  const { _release, loading, error, downloadUrl, version } = useAppRelease()
+  const { _release, loading, error, downloadUrl, version, isAuthenticated } = useAppRelease()
 
   if (loading) {
     return (
@@ -14,7 +14,21 @@ export default function DownloadElectron() {
         title="Cargando versión..."
       >
         <BiDownload />
-        <span>Descargando...</span>
+        <span>Cargando...</span>
+      </button>
+    )
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <button
+        type="button"
+        className={`${styles.button} ${styles.disabled}`}
+        disabled
+        title="Inicia sesión para descargar"
+      >
+        <BiDownload />
+        <span>Iniciar sesión</span>
       </button>
     )
   }
@@ -37,7 +51,7 @@ export default function DownloadElectron() {
     <a
       href={downloadUrl}
       className={styles.button}
-      title={`Descargar v${version}`}
+      title={`Descargar v${version} (solo autenticados)`}
       download
     >
       <BiDownload />

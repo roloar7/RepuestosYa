@@ -162,14 +162,15 @@ CREATE TABLE app_releases (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 
--- RLS: todos pueden ver releases (público)
+-- RLS: solo usuarios autenticados pueden descargar
 ALTER TABLE app_releases ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Anyone can view releases"
+-- Solo usuarios autenticados pueden ver releases
+CREATE POLICY "Authenticated users can view releases"
   ON app_releases FOR SELECT
-  USING (true);
+  USING (auth.role() = 'authenticated');
 
--- Solo admins pueden insertar/actualizar (via trigger o manualmente)
+-- Solo admins pueden insertar/actualizar (requiere trigger en futuro)
 CREATE POLICY "Only admins can manage releases"
   ON app_releases FOR INSERT
   WITH CHECK (false);
@@ -178,6 +179,28 @@ CREATE POLICY "Only admins can manage releases"
 CREATE INDEX idx_app_releases_version ON app_releases(version);
 CREATE INDEX idx_app_releases_platform ON app_releases(platform);
 CREATE INDEX idx_app_releases_is_latest ON app_releases(is_latest);
+```
+
+## 6c. Configurar Storage Policies (app-releases bucket)
+
+```sql
+-- En Supabase Dashboard: SQL Editor
+
+-- Solo usuarios autenticados pueden descargar de Storage
+CREATE POLICY "Authenticated can read app-releases"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'app-releases'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Solo admins pueden subir (optional: implementar con trigger)
+CREATE POLICY "Only admin can upload releases"
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'app-releases'
+    AND auth.role() = 'service_role'
+  );
 ```
 
 ## 7. Flow de autenticación

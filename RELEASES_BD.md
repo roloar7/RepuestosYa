@@ -8,6 +8,8 @@ Las versiones de la app (Electron `.exe`) se almacenan en **Supabase Storage** e
 ✅ Control de versiones centralizado  
 ✅ Versionado automático de clientes  
 ✅ No depender de GitHub Actions  
+✅ **Solo usuarios autenticados pueden descargar**  
+✅ Acceso protegido por RLS (Row Level Security)  
 
 ## Setup Supabase Storage
 
@@ -96,15 +98,24 @@ curl -X POST https://your-project.supabase.co/rest/v1/app_releases \
 ### Electron App (embebido)
 ```javascript
 // En DownloadElectron.jsx
-const { release } = useAppRelease() // Obtiene desde BD
-// Botón linkea a release.download_url (Supabase Storage)
+const { isAuthenticated, downloadUrl, version } = useAppRelease()
+
+// Si no está autenticado: botón "Iniciar sesión" (deshabilitado)
+// Si está autenticado: botón "Descargar v1.0.0" (activo)
 ```
 
 ### Usuario descarga `.exe`
-1. Click botón "Descargar v1.0.0" en navbar
-2. Browser descarga desde Supabase Storage
-3. Usuario ejecuta installer
-4. Electron verifica actualizaciones (próximo: electron-updater)
+1. ✅ Usuario inicia sesión en la app
+2. ✅ Botón "Descargar v1.0.0" se activa
+3. Click botón → descarga desde Supabase Storage
+4. Browser descarga (Supabase RLS valida auth)
+5. Usuario ejecuta installer
+6. Electron verifica actualizaciones (próximo: electron-updater)
+
+### Sin autenticación
+- ❌ Botón deshabilitado ("Iniciar sesión")
+- ❌ No se puede acceder a `/administrador/releases`
+- ❌ Supabase RLS rechaza descarga directa (403)
 
 ## Verificación de integridad
 
@@ -175,22 +186,35 @@ DELETE FROM app_releases WHERE version = '0.9.0' AND platform = 'windows';
 
 ## Seguridad
 
-### Storage Policies (RLS)
+### Autenticación (✅ Implementado)
 
-Las políticas actual permiten que cualquiera descargue. En producción, considera:
+**Solo usuarios autenticados pueden:**
+- Ver releases en BD (tabla `app_releases`)
+- Descargar archivos de Storage
+- Acceder a `/administrador/releases`
+
+**Políticas RLS activadas:**
 
 ```sql
--- Solo lectura pública (descarga)
-CREATE POLICY "Anyone can read releases"
-  ON storage.objects FOR SELECT
-  USING (bucket_id = 'app-releases');
+-- Tabla app_releases: solo autenticados pueden leer
+CREATE POLICY "Authenticated users can view releases"
+  ON app_releases FOR SELECT
+  USING (auth.role() = 'authenticated');
 
--- Solo admin sube
+-- Storage bucket: solo autenticados pueden descargar
+CREATE POLICY "Authenticated can read app-releases"
+  ON storage.objects FOR SELECT
+  USING (
+    bucket_id = 'app-releases'
+    AND auth.role() = 'authenticated'
+  );
+
+-- Solo admins pueden subir (via admin panel)
 CREATE POLICY "Only admin can upload releases"
   ON storage.objects FOR INSERT
   WITH CHECK (
-    bucket_id = 'app-releases' 
-    AND auth.jwt()->>'role' = 'admin'
+    bucket_id = 'app-releases'
+    AND auth.role() = 'service_role'
   );
 ```
 

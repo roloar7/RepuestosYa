@@ -3,17 +3,30 @@ import { supabase } from "@repuestos-ya/supabase"
 
 /**
  * Hook para obtener la versión más reciente de la app
+ * Solo disponible para usuarios autenticados
  * Desde Supabase Storage en lugar de GitHub
  */
 export function useAppRelease() {
   const [release, setRelease] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     async function fetchLatestRelease() {
       try {
         setLoading(true)
+
+        // Verificar si está autenticado
+        const { data: sessionData } = await supabase.auth.getSession()
+        const authenticated = !!sessionData?.session
+
+        setIsAuthenticated(authenticated)
+
+        if (!authenticated) {
+          setError("Debes estar autenticado para descargar")
+          return
+        }
 
         // Detectar plataforma
         const platform = getPlatform()
@@ -57,6 +70,7 @@ export function useAppRelease() {
     error,
     downloadUrl: release?.download_url,
     version: release?.version,
+    isAuthenticated,
   }
 }
 
@@ -81,11 +95,23 @@ export function useAppReleaseHistory() {
   const [releases, setReleases] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [isAuthenticated, setIsAuthenticated] = useState(false)
 
   useEffect(() => {
     async function fetchReleases() {
       try {
         setLoading(true)
+
+        // Verificar si está autenticado
+        const { data: sessionData } = await supabase.auth.getSession()
+        const authenticated = !!sessionData?.session
+
+        setIsAuthenticated(authenticated)
+
+        if (!authenticated) {
+          setError("Debes estar autenticado para ver el historial")
+          return
+        }
 
         const platform = getPlatform()
         if (!platform) {
@@ -112,5 +138,5 @@ export function useAppReleaseHistory() {
     fetchReleases()
   }, [])
 
-  return { releases, loading, error }
+  return { releases, loading, error, isAuthenticated }
 }

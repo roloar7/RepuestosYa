@@ -1,29 +1,30 @@
 import { useState, useEffect } from "react"
 import { supabase } from "@repuestos-ya/supabase"
-import { useAppReleaseHistory } from "../../hooks/useAppRelease"
-import { compressToZip, formatBytes, getCompressionRatio } from "../../utils/zipUtils"
 import styles from "./GestionarReleases.module.css"
 
 /**
- * Componente admin para gestionar releases de la app desde Supabase Storage
- * Solo accesible a usuarios autenticados (RLS lo protege en BD)
+ * Componente admin para gestionar releases
+ * Formulario simple: versión, plataforma, URL de descarga, notas
+ * Almacena en tabla app_releases de Supabase
  */
 export default function GestionarReleases() {
-  // Todos los hooks antes de cualquier return/condicional
-  const { releases, loading: historyLoading, error: historyError, isAuthenticated } = useAppReleaseHistory()
   const [isAdmin, setIsAdmin] = useState(false)
   const [checkingAuth, setCheckingAuth] = useState(true)
-  const [uploading, setUploading] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [releases, setReleases] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
+  const [submitStatus, setSubmitStatus] = useState(null)
+
   const [formData, setFormData] = useState({
     version: "",
     platform: "windows",
+    downloadUrl: "",
     releaseNotes: "",
     isLatest: false,
   })
-  const [selectedFiles, setSelectedFiles] = useState([])
-  const [uploadStatus, setUploadStatus] = useState(null)
 
-  // Verificar que el usuario está autenticado
+  // Verificar autenticación al cargar
   useEffect(() => {
     async function checkAuth() {
       try {
@@ -40,16 +41,30 @@ export default function GestionarReleases() {
     checkAuth()
   }, [])
 
-  // Handlers
-  const handleFileSelect = (e) => {
-    const files = Array.from(e.target.files || [])
-    if (files.length > 0) {
-      // Ordenar por nombre (para que .001, .002, etc estén en orden)
-      files.sort((a, b) => a.name.localeCompare(b.name))
-      setSelectedFiles(files)
-      setUploadStatus(null)
+  // Cargar releases desde BD
+  useEffect(() => {
+    if (!isAdmin) return
+
+    async function fetchReleases() {
+      try {
+        setLoading(true)
+        const { data, error: err } = await supabase
+          .from("app_releases")
+          .select("*")
+          .order("created_at", { ascending: false })
+
+        if (err) throw err
+        setReleases(data || [])
+      } catch (err) {
+        console.error("Error fetching releases:", err)
+        setError(err.message)
+      } finally {
+        setLoading(false)
+      }
     }
-  }
+
+    fetchReleases()
+  }, [isAdmin])
 
   const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target
@@ -61,190 +76,73 @@ export default function GestionarReleases() {
 
   const handleSubmit = async (e) => {
     e.preventDefault()
+    setSubmitStatus(null)
 
-    if (selectedFiles.length === 0) {
-      setUploadStatus({ error: "Selecciona uno o más archivos (.zip o .zip.001, .zip.002, etc)" })
+    if (!formData.version.trim()) {
+      setSubmitStatus({ error: "Ingresa la versión" })
       return
     }
 
-    if (!formData.version) {
-      setUploadStatus({ error: "Ingresa la versión" })
+    if (!formData.downloadUrl.trim()) {
+      setSubmitStatus({ error: "Ingresa la URL de descarga" })
       return
     }
 
     try {
-      setUploading(true)
+      setSubmitting(true)
 
-      // Detectar si es monolítico (.zip) o multipart (.zip.001, .zip.002, etc)
-      const isMultipart = selectedFiles[0].name.match(/\.zip\.\d{3}$/)
-      const totalParts = selectedFiles.length
-
-      if (isMultipart) {
-        setUploadStatus({
-          message: `Subiendo ${totalParts} partes (${selectedFiles
-            .reduce((sum, f) => sum + f.size, 0) / 1024 / 1024
-            .toFixed(2)} MB total)...`,
-        })
-      } else {
-        setUploadStatus({ message: "Comprimiendo/subiendo archivo..." })
+      // Si marca como latest, desmarcar otros
+      if (formData.isLatest) {
+        await supabase
+          .from("app_releases")
+          .update({ is_latest: false })
+          .eq("platform", formData.platform)
       }
 
-      let uploadedUrls = []
-      let totalSize = 0
-
-      if (isMultipart) {
-        // Subir múltiples partes
-        for (let i = 0; i < selectedFiles.length; i++) {
-          const file = selectedFiles[i]
-          const partNumber = String(i + 1).padStart(3, '0')
-          const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.zip.${partNumber}`
-
-          setUploadStatus({
-            message: `Subiendo parte ${i + 1}/${selectedFiles.length}...`,
-          })
-
-          const { error: uploadError } = await supabase.storage
-            .from("app-releases")
-            .upload(fileName, file, {
-              upsert: true,
-              contentType: 'application/octet-stream',
-            })
-
-          if (uploadError) throw uploadError
-
-          const { data: publicUrl } = supabase.storage
-            .from("app-releases")
-            .getPublicUrl(fileName)
-
-          uploadedUrls.push(publicUrl.publicUrl)
-          totalSize += file.size
-
-          console.log(`[Upload] Parte ${i + 1} subida: ${formatBytes(file.size)}`)
-        }
-
-        // URL base (sin la extensión .001)
-        const baseUrl = uploadedUrls[0].replace(/\.001$/, '')
-        const sha256 = 'multipart-' + selectedFiles.length // Placeholder
-
-        setUploadStatus({ message: "Guardando en BD..." })
-
-        // Guardar en BD
-        const { data: _releaseData, error: dbError } = await supabase
-          .from("app_releases")
-          .upsert({
-            version: formData.version,
-            platform: formData.platform,
-            download_url: baseUrl,
-            file_size_bytes: totalSize,
-            original_size_bytes: totalSize, // No sabemos el original, es ZIP parcial
-            total_parts: totalParts,
-            sha256_checksum: sha256,
-            release_notes: formData.releaseNotes,
-            is_latest: formData.isLatest,
-          })
-          .select()
-          .single()
-
-        if (dbError) throw dbError
-
-        setUploadStatus({
-          success: true,
-          message: `✅ Release v${formData.version} publicada (${totalParts} partes, ${formatBytes(totalSize)} total)`,
+      // Insertar o actualizar release
+      const { error: err } = await supabase
+        .from("app_releases")
+        .upsert({
+          version: formData.version.trim(),
+          platform: formData.platform,
+          download_url: formData.downloadUrl.trim(),
+          release_notes: formData.releaseNotes.trim() || null,
+          is_latest: formData.isLatest,
         })
-      } else {
-        // Subir archivo único
-        const selectedFile = selectedFiles[0]
+        .select()
 
-        const exeFileName = `RepuestosYa-Admin-${formData.version}.exe`
-        const zipBlob = await compressToZip(selectedFile, exeFileName)
+      if (err) throw err
 
-        const originalSize = selectedFile.size
-        const compressedSize = zipBlob.size
-        const ratio = getCompressionRatio(originalSize, compressedSize)
-
-        console.log(
-          `[Upload] Original: ${formatBytes(originalSize)}, Compressed: ${formatBytes(compressedSize)}, Ratio: ${ratio}%`
-        )
-
-        setUploadStatus({
-          message: `Archivo comprimido: ${formatBytes(originalSize)} → ${formatBytes(compressedSize)} (${ratio}% reducción)`,
-        })
-
-        // Subir archivo ZIP a Supabase Storage
-        const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.zip`
-        const { data: _uploadData, error: uploadError } = await supabase.storage
-          .from("app-releases")
-          .upload(fileName, zipBlob, {
-            upsert: true,
-            contentType: 'application/zip',
-          })
-
-        if (uploadError) throw uploadError
-
-        setUploadStatus({ message: "Guardando en BD..." })
-
-        // Obtener URL pública
-        const { data: publicUrl } = supabase.storage
-          .from("app-releases")
-          .getPublicUrl(fileName)
-
-        // Calcular SHA256 del ZIP
-        const sha256 = await calculateSHA256(zipBlob)
-
-        // Si es la versión más reciente, actualizar otros releases
-        if (formData.isLatest) {
-          await supabase
-            .from("app_releases")
-            .update({ is_latest: false })
-            .eq("platform", formData.platform)
-        }
-
-        // Insertar o actualizar release en BD
-        const { data: _releaseData, error: dbError } = await supabase
-          .from("app_releases")
-          .upsert({
-            version: formData.version,
-            platform: formData.platform,
-            download_url: publicUrl.publicUrl,
-            file_size_bytes: compressedSize,
-            original_size_bytes: originalSize,
-            total_parts: 1,
-            sha256_checksum: sha256,
-            release_notes: formData.releaseNotes,
-            is_latest: formData.isLatest,
-          })
-          .select()
-          .single()
-
-        if (dbError) throw dbError
-
-        setUploadStatus({
-          success: true,
-          message: `✅ Release v${formData.version} publicada exitosamente`,
-        })
-      }
+      setSubmitStatus({
+        success: true,
+        message: `✅ Release v${formData.version} publicada exitosamente`,
+      })
 
       // Limpiar formulario
       setFormData({
         version: "",
         platform: "windows",
+        downloadUrl: "",
         releaseNotes: "",
         isLatest: false,
       })
-      setSelectedFiles([])
 
       // Refetch releases
-      setTimeout(() => window.location.reload(), 1000)
+      const { data } = await supabase
+        .from("app_releases")
+        .select("*")
+        .order("created_at", { ascending: false })
+      setReleases(data || [])
     } catch (err) {
       console.error("Error:", err)
-      setUploadStatus({ error: err.message })
+      setSubmitStatus({ error: err.message || "Error al publicar" })
     } finally {
-      setUploading(false)
+      setSubmitting(false)
     }
   }
 
   // Mostrar error si no está autenticado
-  if (checkingAuth || !isAuthenticated) {
+  if (checkingAuth || !isAdmin) {
     return (
       <div className={styles.container}>
         <div className={styles.errorContainer}>
@@ -256,26 +154,12 @@ export default function GestionarReleases() {
     )
   }
 
-  // Mostrar error si no es admin
-  if (!isAdmin) {
-    return (
-      <div className={styles.container}>
-        <div className={styles.errorContainer}>
-          <p className={styles.errorText}>
-            🔒 Solo administradores pueden gestionar releases
-          </p>
-        </div>
-      </div>
-    )
-  }
-
-  // Render del componente (solo si está autenticado y es admin)
   return (
     <div className={styles.container}>
       <h2 className={styles.title}>Gestionar Releases</h2>
 
       <div className={styles.content}>
-        {/* Formulario de subida */}
+        {/* Formulario */}
         <div className={styles.uploadSection}>
           <h3>Publicar nueva versión</h3>
 
@@ -289,7 +173,7 @@ export default function GestionarReleases() {
                 value={formData.version}
                 onChange={handleInputChange}
                 placeholder="1.0.0"
-                disabled={uploading}
+                disabled={submitting}
               />
             </div>
 
@@ -300,7 +184,7 @@ export default function GestionarReleases() {
                 name="platform"
                 value={formData.platform}
                 onChange={handleInputChange}
-                disabled={uploading}
+                disabled={submitting}
               >
                 <option value="windows">Windows (.exe)</option>
                 <option value="macos">macOS (.dmg)</option>
@@ -309,30 +193,19 @@ export default function GestionarReleases() {
             </div>
 
             <div className={styles.field}>
-              <label htmlFor="file">Archivo(s) (.zip o .zip.001, .zip.002, etc)</label>
+              <label htmlFor="downloadUrl">URL de descarga</label>
               <input
-                id="file"
-                type="file"
-                onChange={handleFileSelect}
-                accept=".zip,.exe,.dmg,.AppImage"
-                multiple
-                disabled={uploading}
+                id="downloadUrl"
+                type="url"
+                name="downloadUrl"
+                value={formData.downloadUrl}
+                onChange={handleInputChange}
+                placeholder="https://..."
+                disabled={submitting}
               />
-              {selectedFiles.length > 0 && (
-                <div className={styles.fileList}>
-                  <p className={styles.hint}>
-                    📦 {selectedFiles.length} archivo(s) seleccionado(s):{' '}
-                    {(selectedFiles.reduce((sum, f) => sum + f.size, 0) / 1024 / 1024).toFixed(2)} MB
-                  </p>
-                  <ul className={styles.fileItems}>
-                    {selectedFiles.map((f, idx) => (
-                      <li key={idx}>
-                        {f.name} ({(f.size / 1024 / 1024).toFixed(2)} MB)
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <p className={styles.hint}>
+                Ej: enlace directo al .exe, .zip, o .dmg
+              </p>
             </div>
 
             <div className={styles.field}>
@@ -344,7 +217,7 @@ export default function GestionarReleases() {
                 onChange={handleInputChange}
                 placeholder="Cambios, mejoras, fixes..."
                 rows="4"
-                disabled={uploading}
+                disabled={submitting}
               />
             </div>
 
@@ -355,43 +228,43 @@ export default function GestionarReleases() {
                 name="isLatest"
                 checked={formData.isLatest}
                 onChange={handleInputChange}
-                disabled={uploading}
+                disabled={submitting}
               />
               <label htmlFor="isLatest">Marcar como versión más reciente</label>
             </div>
 
-            {uploadStatus && (
+            {submitStatus && (
               <div
                 className={`${styles.status} ${
-                  uploadStatus.error
+                  submitStatus.error
                     ? styles.error
-                    : uploadStatus.success
+                    : submitStatus.success
                       ? styles.success
                       : styles.info
                 }`}
               >
-                {uploadStatus.message || uploadStatus.error}
+                {submitStatus.message || submitStatus.error}
               </div>
             )}
 
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={uploading || selectedFiles.length === 0}
+              disabled={submitting}
             >
-              {uploading ? "Subiendo..." : "Publicar Release"}
+              {submitting ? "Publicando..." : "Publicar Release"}
             </button>
           </form>
         </div>
 
-        {/* Historial de releases */}
+        {/* Historial */}
         <div className={styles.historySection}>
           <h3>Historial de versiones</h3>
 
-          {historyLoading ? (
+          {loading ? (
             <p>Cargando...</p>
-          ) : historyError ? (
-            <p className={styles.error}>{historyError}</p>
+          ) : error ? (
+            <p className={styles.error}>{error}</p>
           ) : releases.length === 0 ? (
             <p>Sin releases publicadas</p>
           ) : (
@@ -414,33 +287,16 @@ export default function GestionarReleases() {
                     <p className={styles.notes}>{release.release_notes}</p>
                   )}
 
-                  <div className={styles.meta}>
-                    <span>📦 ZIP: {(release.file_size_bytes / 1024 / 1024).toFixed(2)} MB</span>
-                    {release.original_size_bytes && (
-                      <span>
-                        💾 Original: {(release.original_size_bytes / 1024 / 1024).toFixed(2)} MB
-                        <br />
-                        📉 Reducción:{' '}
-                        {(
-                          ((1 - release.file_size_bytes / release.original_size_bytes) * 100).toFixed(1)
-                        )}
-                        %
-                      </span>
-                    )}
-                    {release.sha256_checksum && (
-                      <code className={styles.sha256}>
-                        SHA256: {release.sha256_checksum.substring(0, 16)}...
-                      </code>
-                    )}
+                  <div className={styles.urlContainer}>
+                    <a
+                      href={release.download_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={styles.downloadLink}
+                    >
+                      {release.download_url}
+                    </a>
                   </div>
-
-                  <a
-                    href={release.download_url}
-                    className={styles.downloadLink}
-                    download
-                  >
-                    Descargar
-                  </a>
                 </div>
               ))}
             </div>
@@ -449,16 +305,4 @@ export default function GestionarReleases() {
       </div>
     </div>
   )
-}
-
-/**
- * Calcular SHA256 de un archivo (en el navegador)
- * Nota: para producción, mejor calcular en el servidor
- */
-async function calculateSHA256(file) {
-  const buffer = await file.arrayBuffer()
-  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer)
-  const hashArray = Array.from(new Uint8Array(hashBuffer))
-  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("")
-  return hashHex
 }

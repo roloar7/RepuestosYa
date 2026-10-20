@@ -130,6 +130,56 @@ CREATE INDEX idx_printers_status ON printers(status);
 | `updated_at` | TIMESTAMP | Última actualización |
 | `user_id` | UUID | Foreign key a auth.users.id |
 
+### Tabla `app_releases`
+
+| Campo | Tipo | Descripción |
+|-------|------|-------------|
+| `id` | UUID | ID único |
+| `version` | TEXT | Versión (ej: "1.0.0") |
+| `platform` | TEXT | SO (windows/linux/macos) |
+| `download_url` | TEXT | URL en Supabase Storage |
+| `file_size_bytes` | BIGINT | Tamaño del archivo |
+| `sha256_checksum` | TEXT | Hash para verificar integridad |
+| `release_notes` | TEXT | Notas de la versión |
+| `is_latest` | BOOLEAN | ¿Es la versión más reciente? |
+| `created_at` | TIMESTAMP | Fecha de creación |
+| `updated_at` | TIMESTAMP | Última actualización |
+
+## 6b. Crear tabla `app_releases`
+
+```sql
+-- Crear tabla de versiones de la app
+CREATE TABLE app_releases (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  version TEXT NOT NULL UNIQUE,
+  platform TEXT NOT NULL CHECK (platform IN ('windows', 'linux', 'macos')),
+  download_url TEXT NOT NULL,
+  file_size_bytes BIGINT,
+  sha256_checksum TEXT,
+  release_notes TEXT,
+  is_latest BOOLEAN DEFAULT false,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- RLS: todos pueden ver releases (público)
+ALTER TABLE app_releases ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Anyone can view releases"
+  ON app_releases FOR SELECT
+  USING (true);
+
+-- Solo admins pueden insertar/actualizar (via trigger o manualmente)
+CREATE POLICY "Only admins can manage releases"
+  ON app_releases FOR INSERT
+  WITH CHECK (false);
+
+-- Índices
+CREATE INDEX idx_app_releases_version ON app_releases(version);
+CREATE INDEX idx_app_releases_platform ON app_releases(platform);
+CREATE INDEX idx_app_releases_is_latest ON app_releases(is_latest);
+```
+
 ## 7. Flow de autenticación
 
 1. Usuario hace login en `/login`

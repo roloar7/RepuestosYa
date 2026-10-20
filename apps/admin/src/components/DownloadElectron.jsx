@@ -1,9 +1,19 @@
 import { BiDownload } from 'react-icons/bi'
 import { useAppRelease } from '../hooks/useAppRelease'
+import { downloadAndExtractZip } from '../utils/downloadUtils'
 import styles from './DownloadElectron.module.css'
 
 export default function DownloadElectron() {
   const { _release, loading, error, downloadUrl, version, isAuthenticated } = useAppRelease()
+
+  const handleDownload = (e) => {
+    e.preventDefault()
+    if (!downloadUrl || !version) return
+
+    // Nombre del .exe esperado dentro del ZIP
+    const exeFileName = `RepuestosYa-Admin-${version}.exe`
+    downloadAndExtractZip(downloadUrl, exeFileName)
+  }
 
   if (loading) {
     return (
@@ -50,14 +60,14 @@ export default function DownloadElectron() {
 
   // Versión disponible y autenticado ✅
   return (
-    <a
-      href={downloadUrl}
+    <button
+      type="button"
       className={styles.button}
-      title={`Descargar v${version} (solo autenticados)`}
-      download
+      onClick={handleDownload}
+      title={`Descargar v${version} (ZIP comprimido, se extrae automáticamente)`}
     >
       <BiDownload />
       <span>Descargar {version && `v${version}`}</span>
-    </a>
+    </button>
   )
 }

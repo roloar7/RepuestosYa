@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react"
 import { supabase } from "@repuestos-ya/supabase"
 import { useAppReleaseHistory } from "../../hooks/useAppRelease"
+import { compressToZip, formatBytes, getCompressionRatio } from "../../utils/zipUtils"
 import styles from "./GestionarReleases.module.css"
 
 /**
@@ -71,25 +72,44 @@ export default function GestionarReleases() {
 
     try {
       setUploading(true)
-      setUploadStatus({ message: "Subiendo archivo..." })
+      setUploadStatus({ message: "Comprimiendo archivo..." })
 
-      // Subir archivo a Supabase Storage
-      const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.exe`
+      // Comprimir archivo a ZIP
+      const exeFileName = `RepuestosYa-Admin-${formData.version}.exe`
+      const zipBlob = await compressToZip(selectedFile, exeFileName)
+
+      const originalSize = selectedFile.size
+      const compressedSize = zipBlob.size
+      const ratio = getCompressionRatio(originalSize, compressedSize)
+
+      console.log(
+        `[Upload] Original: ${formatBytes(originalSize)}, Compressed: ${formatBytes(compressedSize)}, Ratio: ${ratio}%`
+      )
+
+      setUploadStatus({
+        message: `Archivo comprimido: ${formatBytes(originalSize)} → ${formatBytes(compressedSize)} (${ratio}% reducción)`,
+      })
+
+      // Subir archivo ZIP a Supabase Storage
+      const fileName = `releases/${formData.platform}/RepuestosYa-Admin-${formData.version}.zip`
       const { data: _uploadData, error: uploadError } = await supabase.storage
         .from("app-releases")
-        .upload(fileName, selectedFile, {
+        .upload(fileName, zipBlob, {
           upsert: true,
+          contentType: 'application/zip',
         })
 
       if (uploadError) throw uploadError
+
+      setUploadStatus({ message: "Guardando en BD..." })
 
       // Obtener URL pública
       const { data: publicUrl } = supabase.storage
         .from("app-releases")
         .getPublicUrl(fileName)
 
-      // Calcular SHA256 (nota: esto sería ideal hacerlo en el servidor)
-      const sha256 = await calculateSHA256(selectedFile)
+      // Calcular SHA256 del ZIP
+      const sha256 = await calculateSHA256(zipBlob)
 
       setUploadStatus({ message: "Guardando en BD..." })
 
@@ -108,7 +128,8 @@ export default function GestionarReleases() {
           version: formData.version,
           platform: formData.platform,
           download_url: publicUrl.publicUrl,
-          file_size_bytes: selectedFile.size,
+          file_size_bytes: compressedSize,
+          original_size_bytes: originalSize,
           sha256_checksum: sha256,
           release_notes: formData.releaseNotes,
           is_latest: formData.isLatest,
@@ -303,7 +324,18 @@ export default function GestionarReleases() {
                   )}
 
                   <div className={styles.meta}>
-                    <span>📦 {(release.file_size_bytes / 1024 / 1024).toFixed(2)} MB</span>
+                    <span>📦 ZIP: {(release.file_size_bytes / 1024 / 1024).toFixed(2)} MB</span>
+                    {release.original_size_bytes && (
+                      <span>
+                        💾 Original: {(release.original_size_bytes / 1024 / 1024).toFixed(2)} MB
+                        <br />
+                        📉 Reducción:{' '}
+                        {(
+                          ((1 - release.file_size_bytes / release.original_size_bytes) * 100).toFixed(1)
+                        )}
+                        %
+                      </span>
+                    )}
                     {release.sha256_checksum && (
                       <code className={styles.sha256}>
                         SHA256: {release.sha256_checksum.substring(0, 16)}...

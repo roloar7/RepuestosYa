@@ -137,9 +137,10 @@ CREATE INDEX idx_printers_status ON printers(status);
 | `id` | UUID | ID único |
 | `version` | TEXT | Versión (ej: "1.0.0") |
 | `platform` | TEXT | SO (windows/linux/macos) |
-| `download_url` | TEXT | URL en Supabase Storage |
-| `file_size_bytes` | BIGINT | Tamaño del archivo |
-| `sha256_checksum` | TEXT | Hash para verificar integridad |
+| `download_url` | TEXT | URL en Supabase Storage (ZIP comprimido) |
+| `file_size_bytes` | BIGINT | Tamaño del ZIP comprimido |
+| `original_size_bytes` | BIGINT | Tamaño original del .exe |
+| `sha256_checksum` | TEXT | Hash del ZIP para verificar integridad |
 | `release_notes` | TEXT | Notas de la versión |
 | `is_latest` | BOOLEAN | ¿Es la versión más reciente? |
 | `created_at` | TIMESTAMP | Fecha de creación |
@@ -155,6 +156,7 @@ CREATE TABLE app_releases (
   platform TEXT NOT NULL CHECK (platform IN ('windows', 'linux', 'macos')),
   download_url TEXT NOT NULL,
   file_size_bytes BIGINT,
+  original_size_bytes BIGINT,
   sha256_checksum TEXT,
   release_notes TEXT,
   is_latest BOOLEAN DEFAULT false,

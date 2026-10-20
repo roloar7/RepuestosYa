@@ -33,20 +33,22 @@ export default function DownloadElectron() {
     )
   }
 
-  if (error || !downloadUrl) {
+  // Si está autenticado pero sin versión disponible
+  if (!downloadUrl) {
     return (
       <button
         type="button"
         className={`${styles.button} ${styles.disabled}`}
         disabled
-        title={error || "Sin versión disponible"}
+        title={error || "No hay versión disponible para tu plataforma"}
       >
         <BiDownload />
-        <span>No disponible</span>
+        <span>{error || "Sin versión"}</span>
       </button>
     )
   }
 
+  // Versión disponible y autenticado ✅
   return (
     <a
       href={downloadUrl}

@@ -49,13 +49,19 @@ export function useAppRelease() {
         if (err) {
           if (err.code === "PGRST116") {
             // No rows found: normal, solo no hay release para esta plataforma
+            console.warn("[useAppRelease] No release found for platform:", platform)
             setRelease(null)
+            setError("No hay versión disponible aún")
           } else {
             console.error("[useAppRelease] DB Error:", err)
             setError(err.message || "Error al obtener release")
           }
         } else if (data) {
+          console.log("[useAppRelease] Release found:", data.version)
           setRelease(data)
+        } else {
+          console.warn("[useAppRelease] No data returned")
+          setRelease(null)
         }
       } catch (err) {
         console.error("[useAppRelease] Unexpected error:", err)

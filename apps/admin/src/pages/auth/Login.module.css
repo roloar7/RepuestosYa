@@ -26,6 +26,9 @@
   height: 60px;
   margin: 0 auto var(--space-4);
   display: block;
+  background-color: #6b6b66;
+  padding: 10px;
+  border-radius: 6px;
 }
 
 .title {

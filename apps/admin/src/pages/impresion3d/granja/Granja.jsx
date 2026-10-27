@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import {
   PlayIcon,
   PlusIcon,
@@ -28,6 +28,7 @@ function StatusBadge({ status }) {
 }
 
 function PrinterCard({ printer }) {
+
   return (
     <article className={styles.card}>
       <header className={styles.cardHead}>

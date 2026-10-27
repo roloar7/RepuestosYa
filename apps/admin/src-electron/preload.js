@@ -1,14 +1,12 @@
-import { contextBridge, ipcRenderer } from "electron"
+const { contextBridge, ipcRenderer } = require('electron');
 
 /**
- * Exponer API segura al renderer (React app)
- * El renderer accede via window.electron.*
+ * Expone APIs seguras al renderer (React app)
+ * El renderer accede via window.electron.bridge.*
  */
-contextBridge.exposeInMainWorld("electron", {
+contextBridge.exposeInMainWorld('electron', {
   bridge: {
     validatePrinter: (name, ip, accessCode) =>
-      ipcRenderer.invoke("bridge:validate-printer", name, ip, accessCode),
-    health: () => ipcRenderer.invoke("bridge:health"),
-    tailscaleStatus: () => ipcRenderer.invoke("bridge:tailscale-status"),
+      ipcRenderer.invoke('bridge:validate-printer', name, ip, accessCode),
   },
-})
+});

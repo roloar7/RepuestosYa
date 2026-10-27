@@ -50,7 +50,7 @@ export default function DownloadElectron() {
     )
   }
 
-  // Versión disponible y autenticado ✅
+
   return (
     <a
       href={downloadUrl}

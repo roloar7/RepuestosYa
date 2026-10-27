@@ -6,6 +6,7 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
   const [ip, setIp] = useState("")
   const [accessCode, setAccessCode] = useState("")
   const [error, setError] = useState(null)
+  const [validating, setValidating] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -21,22 +22,50 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
       return
     }
 
-    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$|^[a-zA-Z0-9.-]+\.ts\.net$/
+    // Validar formato de IP (IPv4 o hostname)
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}$|^[a-zA-Z0-9.-]+$/
     if (!ipRegex.test(ip.trim())) {
-      setError("IP o dominio Tailscale inválido (ej: 192.168.1.100 o printer.ts.net)")
+      setError("IP o hostname inválido (ej: 192.168.1.100 o printer-1)")
       return
     }
 
-    const { success, error: submitError } = await onSubmit(name, ip, accessCode)
+    try {
+      setValidating(true)
 
-    if (success) {
-      setName("")
-      setIp("")
-      setAccessCode("")
-      setError(null)
-      onClose()
-    } else {
-      setError(submitError)
+      // Validar conexión a la impresora via MQTT (en Electron)
+      if (window.electron?.bridge?.validatePrinter) {
+        console.log("[AddPrinterModal] Validando impresora via bridge MQTT...")
+        const result = await window.electron.bridge.validatePrinter(
+          name.trim(),
+          ip.trim(),
+          accessCode.trim() || "unknown"
+        )
+
+        if (!result.success) {
+          setError(result.error || "Error al validar la impresora")
+          return
+        }
+
+        console.log("[AddPrinterModal] Impresora validada:", result)
+      }
+
+      // Guardar en BD via onSubmit
+      const { success, error: submitError } = await onSubmit(name, ip, accessCode)
+
+      if (success) {
+        setName("")
+        setIp("")
+        setAccessCode("")
+        setError(null)
+        onClose()
+      } else {
+        setError(submitError)
+      }
+    } catch (err) {
+      console.error("[AddPrinterModal] Error:", err)
+      setError(err.message || "Error inesperado")
+    } finally {
+      setValidating(false)
     }
   }
 
@@ -83,19 +112,19 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
 
           <div className={styles.field}>
             <label htmlFor="printer-ip" className={styles.label}>
-              Dirección IP o Tailscale DNS
+              Dirección IP
             </label>
             <input
               id="printer-ip"
               type="text"
               className={styles.input}
-              placeholder="ej: 192.168.1.100 o printer-1.tailxxx.ts.net"
+              placeholder="ej: 192.168.1.100"
               value={ip}
               onChange={(e) => setIp(e.target.value)}
-              disabled={loading}
+              disabled={loading || validating}
             />
             <p className={styles.hint}>
-              IP local (192.168.x.x) o nombre Tailscale MagicDNS (printer.ts.net)
+              IP local en la red (ej: 192.168.1.100)
             </p>
           </div>
 
@@ -131,9 +160,9 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={loading}
+              disabled={loading || validating}
             >
-              {loading ? "Validando..." : "Agregar"}
+              {validating ? "Conectando..." : loading ? "Guardando..." : "Agregar"}
             </button>
           </div>
         </form>

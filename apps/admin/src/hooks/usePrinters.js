@@ -3,17 +3,12 @@ import { supabase } from "@repuestos-ya/supabase"
 
 /**
  * Hook para gestionar impresoras
- * Soporta validación local (Electron) y remota (Bridge en servidor via Tailscale)
+ * Solo disponible en Electron (requiere window.electron.bridge)
  */
 export function usePrinters(userId) {
   const [printers, setPrinters] = useState([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
-
-  // URL del bridge remoto (configurable via env var para web/Netlify)
-  // En Electron usa localhost:8787; en web usa VITE_BRIDGE_URL si está disponible
-  const BRIDGE_URL =
-    import.meta.env.VITE_BRIDGE_URL || "http://localhost:8787"
 
   useEffect(() => {
     if (!userId) {
@@ -75,7 +70,7 @@ export function usePrinters(userId) {
 
   /**
    * Validar impresora y agregarla a la BD
-   * Detecta automáticamente si está en Electron (IPC) o web (HTTP remoto)
+   * Solo disponible en Electron (requiere IPC con bridge embebido)
    */
   const addPrinter = async (name, ip, accessCode = "unknown") => {
     if (!userId || !name?.trim() || !ip?.trim()) {
@@ -84,49 +79,26 @@ export function usePrinters(userId) {
 
     try {
       setLoading(true)
-      let validationData
 
-      // Opción 1: Electron (IPC con bridge local embebido)
-      if (window.electron?.bridge?.validatePrinter) {
-        console.log("[usePrinters] Usando Electron IPC")
-        const result = await window.electron.bridge.validatePrinter(
-          name,
-          ip,
-          accessCode
-        )
-        if (!result.success) {
-          return { success: false, error: result.error }
+      // Validar que Electron está disponible
+      if (!window.electron?.bridge?.validatePrinter) {
+        return {
+          success: false,
+          error: "Esta función solo está disponible en la aplicación",
         }
-        validationData = result
       }
-      // Opción 2: Web (HTTP con bridge remoto via Tailscale o localhost)
-      else {
-        console.log(`[usePrinters] Usando bridge remoto: ${BRIDGE_URL}`)
-        const validateResponse = await fetch(
-          `${BRIDGE_URL}/printers/validate`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              name: name.trim(),
-              ip: ip.trim(),
-              accessCode: accessCode || "unknown",
-            }),
-          }
-        )
 
-        if (!validateResponse.ok) {
-          const errorData = await validateResponse.json()
-          return {
-            success: false,
-            error:
-              errorData.error ||
-              "No se pudo validar la conexión con la impresora",
-          }
-        }
-
-        validationData = await validateResponse.json()
+      console.log("[usePrinters] Validando impresora via Electron IPC")
+      const result = await window.electron.bridge.validatePrinter(
+        name,
+        ip,
+        accessCode
+      )
+      if (!result.success) {
+        return { success: false, error: result.error }
       }
+
+      const validationData = result
 
       // Guardar en Supabase
       const { data, error: err } = await supabase
@@ -211,6 +183,5 @@ export function usePrinters(userId) {
     addPrinter,
     deletePrinter,
     updatePrinterStatus,
-    bridgeUrl: BRIDGE_URL,
   }
 }

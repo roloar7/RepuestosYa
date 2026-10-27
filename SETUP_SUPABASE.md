@@ -73,6 +73,7 @@ CREATE TABLE printers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
   ip TEXT NOT NULL UNIQUE,
+  access_code TEXT,
   serial TEXT,
   status TEXT DEFAULT 'offline' CHECK (status IN ('idle', 'printing', 'paused', 'error', 'offline')),
   last_seen TIMESTAMP WITH TIME ZONE,

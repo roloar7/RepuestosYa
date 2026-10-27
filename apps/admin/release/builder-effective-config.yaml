@@ -1,0 +1,13 @@
+directories:
+  output: release
+  buildResources: build
+appId: com.repuestosya.admin
+productName: RepuestosYa
+win:
+  target:
+    - nsis
+  icon: build/icon.png
+mac: null
+linux: null
+files: []
+electronVersion: 44.9.0

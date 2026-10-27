@@ -14,8 +14,8 @@ dist-build
 out
 *.local
 .env
-.md
-.sql
+*.md
+*.sql
 
 # Electron build artifacts
 *.asar

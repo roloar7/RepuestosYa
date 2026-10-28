@@ -5,7 +5,8 @@ import { useAuthContext } from "../../hooks/useAuthContext.js"
 import { useProfile } from "../../hooks/useProfile.js"
 import { USER_ROLE_LABELS } from "../../constants/userRoles.js"
 import { BellIcon, MenuIcon, SearchIcon, UserCircleIcon } from "../icons.jsx"
-import DownloadElectron from "../DownloadElectron.jsx"
+import UpdateElectron from "../UpdateElectron.jsx"
+import DownloadWeb from "../DownloadWeb.jsx"
 import styles from "./Navbar.module.css"
 
 function Navbar({ onToggle, isCompact, drawerOpen }) {
@@ -64,7 +65,8 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
         <span className={styles.badgeDot} />
       </button>
 
-      <DownloadElectron />
+      <UpdateElectron />
+      <DownloadWeb />
 
       <div className={styles.userDropdown}>
         <button type="button" className={styles.userBtn}>

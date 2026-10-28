@@ -3,6 +3,10 @@ directories:
   buildResources: build
 appId: com.repuestosya.admin
 productName: RepuestosYa
+publish:
+  provider: github
+  owner: roloar7
+  repo: RepuestosYa
 win:
   target:
     - nsis

@@ -1,13 +1,75 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const mqtt = require('mqtt');
+const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
+
+// Configurar electron-updater para GitHub Releases
+autoUpdater.checkForUpdatesAndNotify();
+autoUpdater.allowDowngrade = false;
 
 /**
  * Validar impresora Bambu via MQTT
  * Conecta a la impresora y obtiene su serial
  */
+// Handlers para actualización
+ipcMain.handle('updater:get-version', async () => {
+  return {
+    currentVersion: app.getVersion(),
+  };
+});
+
+ipcMain.handle('updater:check-for-updates', async (event) => {
+  try {
+    const result = await autoUpdater.checkForUpdates();
+    return {
+      hasUpdate: result?.updateInfo?.version !== app.getVersion(),
+      newVersion: result?.updateInfo?.version,
+      currentVersion: app.getVersion(),
+    };
+  } catch (error) {
+    console.error('[Updater] Error checking for updates:', error);
+    return {
+      hasUpdate: false,
+      error: error.message,
+      currentVersion: app.getVersion(),
+    };
+  }
+});
+
+ipcMain.handle('updater:download-and-install', async (event) => {
+  try {
+    let downloadProgress = 0;
+
+    autoUpdater.on('download-progress', (progress) => {
+      downloadProgress = Math.round(progress.percent);
+      console.log(`[Updater] Download progress: ${downloadProgress}%`);
+      if (mainWindow) {
+        mainWindow.webContents.send('updater:download-progress', downloadProgress);
+      }
+    });
+
+    await autoUpdater.downloadUpdate();
+    autoUpdater.quitAndInstall();
+
+    return {
+      success: true,
+      message: 'Instalando actualización...',
+    };
+  } catch (error) {
+    console.error('[Updater] Error downloading/installing update:', error);
+    return {
+      success: false,
+      error: error.message,
+    };
+  }
+});
+
+ipcMain.on('updater:quit-and-install', () => {
+  autoUpdater.quitAndInstall();
+});
+
 ipcMain.handle('bridge:validate-printer', async (event, name, ip, accessCode) => {
   return new Promise((resolve) => {
     console.log(`[Bridge] Validando impresora: ${name} en ${ip}`);

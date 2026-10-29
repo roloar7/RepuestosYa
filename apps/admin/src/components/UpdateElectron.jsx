@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { BiDownload } from 'react-icons/bi'
+import UpdateElectronModal from './UpdateElectronModal'
 import styles from './UpdateElectron.module.css'
 
 /**
@@ -15,6 +16,7 @@ export default function UpdateElectron() {
   const [downloading, setDownloading] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState(0)
   const [error, setError] = useState(null)
+  const [showModal, setShowModal] = useState(false)
 
   // No mostrar si no hay Electron
   if (!window.electron?.updater) {
@@ -82,25 +84,36 @@ export default function UpdateElectron() {
     checkUpdates()
   }, [])
 
-  // Suscribirse a progreso de descarga (si usa electron-updater)
+  // Suscribirse a progreso de descarga
   useEffect(() => {
     if (!window.electron?.updater?.onDownloadProgress) {
       return
     }
 
     const unsubscribe = window.electron.updater.onDownloadProgress((progress) => {
-      setDownloadProgress(progress)
+      setDownloadProgress(Math.round(progress))
     })
 
     return () => unsubscribe?.()
   }, [])
 
-  const handleUpdate = async () => {
+  const handleOpenModal = () => {
+    setShowModal(true)
+  }
+
+  const handleCloseModal = () => {
+    if (!downloading) {
+      setShowModal(false)
+    }
+  }
+
+  const handleInstall = async () => {
     if (!newVersion) return
 
     try {
       setDownloading(true)
       setError(null)
+      setDownloadProgress(0)
 
       console.log('[UpdateElectron] Iniciando descarga de v' + newVersion)
 
@@ -140,32 +153,28 @@ export default function UpdateElectron() {
   }
 
   // Actualización disponible
-  if (downloading) {
-    return (
-      <div className={styles.compact}>
-        <div className={styles.miniProgress}>
-          <div
-            className={styles.miniProgressFill}
-            style={{ width: `${downloadProgress}%` }}
-          />
-        </div>
-        <span className={styles.text}>{downloadProgress}%</span>
-      </div>
-    )
-  }
-
   return (
-    <button
-      type="button"
-      className={styles.updateBtn}
-      onClick={handleUpdate}
-      disabled={downloading}
-      title={`Nueva versión disponible: v${newVersion}`}
-    >
-      <BiDownload size={18} />
-      <span>Actualizar</span>
-      {error && <span className={styles.error}>!</span>}
-    </button>
+    <>
+      <button
+        type="button"
+        className={styles.updateBtn}
+        onClick={handleOpenModal}
+        disabled={downloading}
+        title={`Nueva versión disponible: v${newVersion}`}
+      >
+        <BiDownload size={18} />
+        <span>Actualizar</span>
+      </button>
+
+      <UpdateElectronModal
+        isOpen={showModal}
+        onClose={handleCloseModal}
+        newVersion={newVersion}
+        onInstall={handleInstall}
+        isInstalling={downloading}
+        downloadProgress={downloadProgress}
+      />
+    </>
   )
 }
 

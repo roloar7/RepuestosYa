@@ -90,8 +90,10 @@ export default function UpdateElectron() {
       return
     }
 
+    // Usar el listener expuesto en preload.js
     const unsubscribe = window.electron.updater.onDownloadProgress((progress) => {
-      setDownloadProgress(Math.round(progress))
+      console.log('[UpdateElectron] Progreso:', progress)
+      setDownloadProgress(progress)
     })
 
     return () => unsubscribe?.()

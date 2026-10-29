@@ -15,8 +15,8 @@
   align-items: center;
   gap: 8px;
   padding: 8px 12px;
-  background: var(--color-primary, #3b82f6);
-  color: white;
+  background: var(--admin-color-primary, #F2E394);
+  color: var(--color-text-on-primary, #001D3D);
   border: none;
   border-radius: var(--radius-md, 8px);
   font-size: 14px;
@@ -27,8 +27,8 @@
 }
 
 .updateBtn:hover:not(:disabled) {
-  background: var(--color-primary-dark, #2563eb);
-  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  background: var(--admin-color-primary-hover, #E9D675);
+  box-shadow: 0 4px 12px rgba(242, 227, 148, 0.3);
   transform: translateY(-1px);
 }
 

@@ -46,15 +46,20 @@ export default function DownloadWeb() {
 
         const release = await response.json()
         console.log('[DownloadWeb] Release obtenida:', release.tag_name)
+        console.log('[DownloadWeb] Assets disponibles:', release.assets?.map(a => a.name))
 
         // Extraer versión
         const version = release.tag_name?.replace('v', '') || 'latest'
         setVersion(version)
 
-        // Buscar el asset .exe (Windows)
-        const exeAsset = release.assets?.find(asset =>
-          asset.name.toLowerCase().includes('.exe')
-        )
+        // Buscar el asset .exe (Windows) - excluir .blockmap y otros archivos
+        const exeAsset = release.assets?.find(asset => {
+          const name = asset.name.toLowerCase()
+          const isExe = name.endsWith('.exe')
+          const isNotBlockmap = !name.includes('.blockmap')
+          console.log(`[DownloadWeb] Checking ${asset.name}: isExe=${isExe}, isNotBlockmap=${isNotBlockmap}`)
+          return isExe && isNotBlockmap
+        })
 
         if (exeAsset) {
           console.log('[DownloadWeb] .exe encontrado:', exeAsset.name)

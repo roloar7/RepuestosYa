@@ -1,8 +1,8 @@
-version: 1.0.0
+version: 1.0.1
 files:
-  - url: RepuestosYa-Setup-1.0.0.exe
-    sha512: QJFtyEVjMI8EBGecbK0Y1eor2Lg7FDruBNDrX1SF00AB3ZUbEFE0vikFDv5gxzeV8vIuk9r4mqZgqe0iwqHf0g==
-    size: 132958282
-path: RepuestosYa-Setup-1.0.0.exe
-sha512: QJFtyEVjMI8EBGecbK0Y1eor2Lg7FDruBNDrX1SF00AB3ZUbEFE0vikFDv5gxzeV8vIuk9r4mqZgqe0iwqHf0g==
-releaseDate: '2026-10-29T14:29:45.069Z'
+  - url: RepuestosYa-Setup-1.0.1.exe
+    sha512: TRolgyrE22plcn6KXJ5wg33RXuvStsFTkw4XvkpZsipxMBsR4Nli5AqZvx6Tj/ky1X0uZwhh6uGccgw7CTh9lA==
+    size: 132958266
+path: RepuestosYa-Setup-1.0.1.exe
+sha512: TRolgyrE22plcn6KXJ5wg33RXuvStsFTkw4XvkpZsipxMBsR4Nli5AqZvx6Tj/ky1X0uZwhh6uGccgw7CTh9lA==
+releaseDate: '2026-10-29T14:36:41.430Z'

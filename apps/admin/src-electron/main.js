@@ -4,10 +4,12 @@ const mqtt = require('mqtt');
 const { autoUpdater } = require('electron-updater');
 
 const isDev = !app.isPackaged;
+let mainWindow = null;
 
 // Configurar electron-updater para GitHub Releases
 autoUpdater.checkForUpdatesAndNotify();
 autoUpdater.allowDowngrade = false;
+autoUpdater.autoDownload = false; // No descargar automáticamente
 
 /**
  * Validar impresora Bambu via MQTT
@@ -40,25 +42,52 @@ ipcMain.handle('updater:check-for-updates', async (event) => {
 
 ipcMain.handle('updater:download-and-install', async (event) => {
   try {
-    let downloadProgress = 0;
+    console.log('[Updater] Iniciando descarga e instalación...');
 
+    // Remover listeners antiguos para evitar duplicados
+    autoUpdater.removeAllListeners('download-progress');
+    autoUpdater.removeAllListeners('update-downloaded');
+    autoUpdater.removeAllListeners('error');
+
+    // Listener para progreso de descarga
     autoUpdater.on('download-progress', (progress) => {
-      downloadProgress = Math.round(progress.percent);
-      console.log(`[Updater] Download progress: ${downloadProgress}%`);
-      if (mainWindow) {
-        mainWindow.webContents.send('updater:download-progress', downloadProgress);
+      const percent = Math.round(progress.percent);
+      console.log(`[Updater] Progreso: ${percent}%`);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:download-progress', percent);
       }
     });
 
-    await autoUpdater.downloadUpdate();
-    autoUpdater.quitAndInstall();
+    // Listener para cuando se descarga completamente
+    autoUpdater.on('update-downloaded', () => {
+      console.log('[Updater] Descarga completada, reiniciando e instalando...');
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:download-progress', 100);
+      }
+      // Instalar después de 500ms para que el UI se actualice
+      setTimeout(() => {
+        autoUpdater.quitAndInstall();
+      }, 500);
+    });
+
+    // Listener para errores
+    autoUpdater.on('error', (error) => {
+      console.error('[Updater] Error durante actualización:', error);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('updater:download-error', error.message);
+      }
+    });
+
+    // Descargar actualización
+    const updateInfo = await autoUpdater.downloadUpdate();
+    console.log('[Updater] Update info:', updateInfo);
 
     return {
       success: true,
-      message: 'Instalando actualización...',
+      message: 'Descarga iniciada...',
     };
   } catch (error) {
-    console.error('[Updater] Error downloading/installing update:', error);
+    console.error('[Updater] Error:', error.message);
     return {
       success: false,
       error: error.message,
@@ -165,7 +194,7 @@ ipcMain.handle('bridge:validate-printer', async (event, name, ip, accessCode) =>
 
 function createWindow() {
   const iconPath = path.join(__dirname, 'icon.ico');
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     icon: iconPath,
@@ -183,6 +212,10 @@ function createWindow() {
     const indexPath = path.join(app.getAppPath(), 'dist/index.html');
     mainWindow.loadFile(indexPath);
   }
+
+  mainWindow.on('closed', () => {
+    mainWindow = null;
+  });
 }
 
 app.whenReady().then(() => {

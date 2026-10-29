@@ -32,25 +32,63 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
     try {
       setValidating(true)
 
-      // Validar conexión a la impresora via MQTT (en Electron)
-      if (window.electron?.bridge?.validatePrinter) {
-        console.log("[AddPrinterModal] Validando impresora via bridge MQTT...")
-        const result = await window.electron.bridge.validatePrinter(
-          name.trim(),
-          ip.trim(),
-          accessCode.trim() || "unknown"
-        )
+      const printerIp = ip.trim()
+      const printerAccessCode = accessCode.trim() || "00000000"
 
-        if (!result.success) {
-          setError(result.error || "Error al validar la impresora")
+      console.log("[AddPrinterModal] Validando impresora:", printerIp)
+
+      // Intentar validar via HTTP Bridge (Node.js service en localhost:8787)
+      try {
+        const bridgeResponse = await fetch("http://localhost:8787/printers/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ip: printerIp,
+            name: name.trim(),
+            accessCode: printerAccessCode,
+          }),
+        })
+
+        const bridgeResult = await bridgeResponse.json()
+
+        if (!bridgeResponse.ok) {
+          console.warn("[AddPrinterModal] Bridge validation error:", bridgeResult.error)
+          setError(`No se pudo conectar a la impresora: ${bridgeResult.error}`)
           return
         }
 
-        console.log("[AddPrinterModal] Impresora validada:", result)
+        console.log("[AddPrinterModal] Impresora validada via HTTP Bridge:", bridgeResult)
+      } catch (bridgeErr) {
+        // Si el bridge no está disponible, intentar validar via Electron MQTT (fallback)
+        console.warn("[AddPrinterModal] HTTP Bridge no disponible, intentando Electron MQTT...")
+
+        if (window.electron?.bridge?.validatePrinter) {
+          const result = await window.electron.bridge.validatePrinter(
+            name.trim(),
+            printerIp,
+            printerAccessCode
+          )
+
+          if (!result.success) {
+            setError(result.error || "Error al validar la impresora")
+            return
+          }
+
+          console.log("[AddPrinterModal] Impresora validada via Electron:", result)
+        } else {
+          console.warn("[AddPrinterModal] Ni HTTP Bridge ni Electron disponibles")
+          // En web, permitir agregar sin validar
+          if (!window.electron) {
+            console.log("[AddPrinterModal] En web, agregando sin validación")
+          } else {
+            setError("No se puede validar: bridge no disponible")
+            return
+          }
+        }
       }
 
       // Guardar en BD via onSubmit
-      const { success, error: submitError } = await onSubmit(name, ip, accessCode)
+      const { success, error: submitError } = await onSubmit(name, printerIp, printerAccessCode)
 
       if (success) {
         setName("")

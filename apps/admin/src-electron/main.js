@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const mqtt = require('mqtt');
 const { autoUpdater } = require('electron-updater');
+const bridgeService = require('./bridge-service.js');
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
@@ -218,8 +219,16 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   createWindow();
+
+  // Iniciar Bridge MQTT en background
+  try {
+    await bridgeService.startBridgeServer(8787);
+    console.log('[Main] ✓ Bridge MQTT iniciado correctamente');
+  } catch (err) {
+    console.error('[Main] ✗ Error iniciando Bridge MQTT:', err);
+  }
 
   app.on('activation', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -228,7 +237,15 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
+  // Detener Bridge MQTT antes de salir
+  try {
+    await bridgeService.stopBridgeServer();
+    console.log('[Main] ✓ Bridge MQTT detenido');
+  } catch (err) {
+    console.error('[Main] ✗ Error deteniendo Bridge MQTT:', err);
+  }
+
   if (process.platform !== 'darwin') {
     app.quit();
   }

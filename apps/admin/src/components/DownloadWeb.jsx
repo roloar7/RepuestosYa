@@ -55,17 +55,14 @@ export default function DownloadWeb() {
         // Buscar el asset .exe (Windows) - excluir .blockmap y otros archivos
         const exeAsset = release.assets?.find(asset => {
           const name = asset.name.toLowerCase()
-          const isExe = name.endsWith('.exe')
-          const isNotBlockmap = !name.includes('.blockmap')
-          console.log(`[DownloadWeb] Checking ${asset.name}: isExe=${isExe}, isNotBlockmap=${isNotBlockmap}`)
-          return isExe && isNotBlockmap
+          return name.endsWith('.exe') && !name.includes('.blockmap') && !name.endsWith('.yml')
         })
 
         if (exeAsset) {
-          console.log('[DownloadWeb] .exe encontrado:', exeAsset.name)
+          console.log('[DownloadWeb] ¡.exe encontrado con éxito!:', exeAsset.name)
           setDownloadUrl(exeAsset.browser_download_url)
         } else {
-          console.warn('[DownloadWeb] No se encontró .exe en la release')
+          console.warn('[DownloadWeb] No se encontró el .exe en la release')
           setError(true)
         }
       } catch (err) {

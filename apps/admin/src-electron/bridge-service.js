@@ -121,26 +121,42 @@ async function getPrinterStatus(ip, accessCode = '00000000') {
       client.on('connect', () => {
         console.log(`[BridgeService] Conectado a ${ip}, suscribiendo a topics...`)
 
-        client.subscribe('device/+/report', (err) => {
-          if (err) {
-            console.error(`[BridgeService] Error suscribirse a reports en ${ip}:`, err.message)
-          }
+        // Intentar suscribirse a varios topics de Bambu
+        const topics = [
+          'device/+/report',
+          'device/+/state',
+          'report',
+        ]
+
+        topics.forEach((topic) => {
+          client.subscribe(topic, (err) => {
+            if (err) {
+              console.warn(`[BridgeService] Error suscribirse a "${topic}": ${err.message}`)
+            } else {
+              console.log(`[BridgeService] Suscrito a "${topic}"`)
+            }
+          })
         })
       })
 
       client.on('message', (topic, message) => {
         try {
           const data = JSON.parse(message.toString())
-          console.log(`[BridgeService] Mensaje recibido de ${ip}:`, topic)
+          console.log(`[BridgeService] Mensaje recibido de ${ip} en topic "${topic}":`, JSON.stringify(data).substring(0, 100))
 
           statusData.online = true
 
+          // Extraer datos según la estructura del mensaje
           if (data.print && data.print.state) {
             statusData.state = data.print.state
+          } else if (data.state) {
+            statusData.state = data.state
           }
 
           if (data.nozzle_temper !== undefined) {
             statusData.temperature = data.nozzle_temper
+          } else if (data.temperature !== undefined) {
+            statusData.temperature = data.temperature
           }
 
           if (data.sn) {
@@ -151,6 +167,7 @@ async function getPrinterStatus(ip, accessCode = '00000000') {
             resolved = true
             clearTimeout(timeoutId)
             client.end()
+            console.log(`[BridgeService] Estado final para ${ip}:`, statusData)
             resolve({ success: true, ...statusData })
           }
         } catch (err) {
@@ -173,6 +190,11 @@ async function getPrinterStatus(ip, accessCode = '00000000') {
       client.on('offline', () => {
         if (resolved) return
         console.warn(`[BridgeService] Impresora offline: ${ip}`)
+        // No resolver aquí, esperar al timeout o a un mensaje
+      })
+
+      client.on('disconnect', () => {
+        console.log(`[BridgeService] Desconectado de ${ip}`)
       })
     } catch (err) {
       if (resolved) return

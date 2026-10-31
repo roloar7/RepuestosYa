@@ -82,6 +82,19 @@ ipcMain.handle('updater:download-and-install', async (event) => {
   try {
     console.log('[Updater] Iniciando descarga e instalación...');
 
+    // Primero, verificar si hay actualizaciones
+    console.log('[Updater] Verificando actualizaciones...');
+    const checkResult = await autoUpdater.checkForUpdates();
+    console.log('[Updater] Resultado de checkForUpdates:', checkResult);
+
+    if (!checkResult?.updateInfo?.version || checkResult.updateInfo.version === app.getVersion()) {
+      console.log('[Updater] No hay actualizaciones disponibles');
+      return {
+        success: false,
+        error: 'No hay actualizaciones disponibles',
+      };
+    }
+
     // Remover listeners antiguos para evitar duplicados
     autoUpdater.removeAllListeners('download-progress');
     autoUpdater.removeAllListeners('update-downloaded');

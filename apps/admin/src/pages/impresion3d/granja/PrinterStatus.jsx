@@ -52,7 +52,11 @@ export function PrinterStatus({ printer, getPrinterStatus }) {
     return (
       <div className={styles.container}>
         <div className={styles.error}>
-          <p className={styles.errorText}>{error}</p>
+          <p className={styles.errorText}>
+            {error.includes('500') 
+              ? 'No se pudo obtener el estado. Verifica que la impresora esté en línea.'
+              : error}
+          </p>
           <button
             type="button"
             className={styles.retryBtn}

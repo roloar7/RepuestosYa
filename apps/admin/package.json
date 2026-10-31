@@ -1,7 +1,7 @@
 {
   "name": "admin",
   "private": true,
-  "version": "1.0.2",
+  "version": "1.0.4",
   "description": "Panel de administración RepuestosYa con gestión de impresoras 3D Bambu Lab",
   "author": "TIZIANO",
   "main": "src-electron/main.js",
@@ -47,7 +47,7 @@
       "provider": "github",
       "owner": "roloar7",
       "repo": "RepuestosYa",
-      "releaseType": "release"
+      "releaseType": "draft"
     },
     "win": {
       "target": [

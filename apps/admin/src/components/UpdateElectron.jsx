@@ -117,6 +117,20 @@ export default function UpdateElectron() {
       setError(null)
       setDownloadProgress(0)
 
+      console.log('[UpdateElectron] Verificando actualizaciones antes de descargar...')
+
+      // Primero, verificar si hay actualizaciones disponibles
+      if (window.electron?.updater?.checkForUpdates) {
+        const checkResult = await window.electron.updater.checkForUpdates()
+        console.log('[UpdateElectron] Resultado de verificación:', checkResult)
+
+        if (!checkResult.hasUpdate) {
+          setError('No hay actualizaciones disponibles')
+          setDownloading(false)
+          return
+        }
+      }
+
       console.log('[UpdateElectron] Iniciando descarga de v' + newVersion)
 
       // Usar electron-updater si está disponible

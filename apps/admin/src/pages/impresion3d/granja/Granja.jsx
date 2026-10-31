@@ -4,6 +4,7 @@ import { useAuthContext } from "../../../hooks/useAuthContext.js"
 import { usePrinters } from "../../../hooks/usePrinters.js"
 import { AddPrinterModal } from "./AddPrinterModal.jsx"
 import { DeletePrinterModal } from "./DeletePrinterModal.jsx"
+import { PrinterStatus } from "./PrinterStatus.jsx"
 import styles from "./Granja.module.css"
 
 const statusMeta = {
@@ -23,7 +24,8 @@ function StatusBadge({ status }) {
   )
 }
 
-function PrinterCard({ printer, onDelete }) {
+function PrinterCard({ printer, onDelete, getPrinterStatus }) {
+  const [expanded, setExpanded] = useState(false)
 
   return (
     <article className={styles.card}>
@@ -44,11 +46,25 @@ function PrinterCard({ printer, onDelete }) {
             ? "Sin conexión con la impresora."
             : "Lista para recibir un trabajo."}
         </p>
+
+        {expanded && getPrinterStatus && (
+          <div className={styles.statusSection}>
+            <PrinterStatus printer={printer} getPrinterStatus={getPrinterStatus} />
+          </div>
+        )}
       </div>
 
       <footer className={styles.cardFoot}>
         <button 
           type="button" 
+          className={styles.ghostBtn}
+          onClick={() => setExpanded(!expanded)}
+          title={expanded ? "Ocultar estado" : "Ver estado"}
+        >
+          {expanded ? "⬆️" : "⬇️"} Estado
+        </button>
+        <button
+          type="button"
           className={styles.ghostBtn}
           onClick={() => onDelete(printer)}
           title="Eliminar impresora"
@@ -69,7 +85,7 @@ function PrinterCard({ printer, onDelete }) {
 
 function Granja() {
   const { user } = useAuthContext()
-  const { printers, loading: printersLoading, addPrinter, deletePrinter } = usePrinters(user?.id)
+  const { printers, loading: printersLoading, addPrinter, deletePrinter, getPrinterStatus } = usePrinters(user?.id)
   const [query, setQuery] = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
   const [printerToDelete, setPrinterToDelete] = useState(null)
@@ -172,6 +188,7 @@ function Granja() {
               key={printer.id} 
               printer={printer}
               onDelete={setPrinterToDelete}
+              getPrinterStatus={getPrinterStatus}
             />
           ))}
         </div>

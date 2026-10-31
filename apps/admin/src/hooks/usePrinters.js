@@ -176,6 +176,31 @@ export function usePrinters(userId) {
     }
   }
 
+  /**
+   * Obtener estado en tiempo real de la impresora (temperatura, etc.)
+   * Usa el HTTP Bridge para conectarse vía MQTT
+   */
+  const getPrinterStatus = async (ip, accessCode = "00000000") => {
+    try {
+      const response = await fetch("http://localhost:8787/printers/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ip, accessCode }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        return { success: false, error: error.error }
+      }
+
+      const status = await response.json()
+      return { success: true, ...status }
+    } catch (err) {
+      console.error("[usePrinters] Error obteniendo estado:", err)
+      return { success: false, error: err.message }
+    }
+  }
+
   return {
     printers,
     loading,
@@ -183,5 +208,6 @@ export function usePrinters(userId) {
     addPrinter,
     deletePrinter,
     updatePrinterStatus,
+    getPrinterStatus,
   }
 }

@@ -11,34 +11,54 @@ export function PrinterStatus({ printer, getPrinterStatus }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
   const [lastUpdate, setLastUpdate] = useState(null)
+  const [retries, setRetries] = useState(0)
 
   const fetchStatus = async () => {
     try {
       setLoading(true)
       setError(null)
 
+      console.log(`[PrinterStatus] Obteniendo estado de ${printer.ip}... (intento ${retries + 1})`)
+
       const result = await getPrinterStatus(printer.ip, printer.access_code || '00000000')
 
       if (result.success) {
         setStatus(result)
         setLastUpdate(new Date())
+        setRetries(0) // Reset retries on success
       } else {
         setError(result.error)
+        setRetries((prev) => prev + 1)
       }
     } catch (err) {
       console.error('[PrinterStatus] Error:', err)
       setError(err.message)
+      setRetries((prev) => prev + 1)
     } finally {
       setLoading(false)
     }
   }
 
-  // Auto-refresh cada 30 segundos
+  // Auto-refresh cada 30 segundos (solo si no hay error)
+  // Max 3 reintentos antes de parar
   useEffect(() => {
+    if (retries >= 3) {
+      console.log('[PrinterStatus] Max retries alcanzados, deteniendo intentos')
+      return
+    }
+
     fetchStatus()
-    const interval = setInterval(fetchStatus, 30000)
-    return () => clearInterval(interval)
-  }, [printer.ip, printer.access_code])
+    
+    // Solo hacer auto-refresh si está funcionando y retries < 3
+    let interval
+    if (!error && retries < 3) {
+      interval = setInterval(fetchStatus, 30000)
+    }
+    
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [printer.ip, printer.access_code, retries])
 
   if (!status && !error) {
     return (
@@ -49,22 +69,32 @@ export function PrinterStatus({ printer, getPrinterStatus }) {
   }
 
   if (error) {
+    const maxRetriesReached = retries >= 3
     return (
       <div className={styles.container}>
         <div className={styles.error}>
           <p className={styles.errorText}>
-            {error.includes('500') 
-              ? 'No se pudo obtener el estado. Verifica que la impresora esté en línea.'
+            {error.includes('Timeout') 
+              ? '⏱️ Timeout: la impresora no responde en tiempo. Verifica que esté en línea y el puerto 8883 esté abierto.'
+              : error.includes('500') 
+              ? '❌ Error en el bridge MQTT. Verifica el access code.'
               : error}
           </p>
-          <button
-            type="button"
-            className={styles.retryBtn}
-            onClick={fetchStatus}
-            disabled={loading}
-          >
-            <BiRefresh size={14} /> Reintentar
-          </button>
+          {!maxRetriesReached && (
+            <button
+              type="button"
+              className={styles.retryBtn}
+              onClick={fetchStatus}
+              disabled={loading}
+            >
+              <BiRefresh size={14} /> Reintentar ({3 - retries})
+            </button>
+          )}
+          {maxRetriesReached && (
+            <p className={styles.hintText}>
+              Se alcanzó el máximo de reintentos. La impresora probablemente no está disponible.
+            </p>
+          )}
         </div>
       </div>
     )

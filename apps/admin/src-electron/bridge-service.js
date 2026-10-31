@@ -86,18 +86,20 @@ async function getPrinterStatus(ip, accessCode = '00000000') {
 
   return new Promise((resolve) => {
     let resolved = false
+    let client = null
     const timeoutId = setTimeout(() => {
       if (!resolved) {
         resolved = true
         console.log(`[BridgeService] Timeout obteniendo estado de ${ip}`)
-        resolve({ success: false, error: 'Timeout: no hay respuesta de la impresora' })
+        if (client) client.end()
+        resolve({ success: false, error: 'Timeout: no hay respuesta de la impresora en 10 segundos. Verifica que esté en línea.' })
       }
     }, 10000)
 
     try {
       const brokerUrl = `mqtts://bblp:${accessCode}@${ip}:8883`
 
-      const client = mqtt.connect(brokerUrl, {
+      client = mqtt.connect(brokerUrl, {
         rejectUnauthorized: false,
         protocol: 'mqtts',
         port: 8883,
@@ -306,6 +308,53 @@ function startBridgeServer(port = 8787) {
       if (req.url === '/health') {
         res.writeHead(200, { 'Content-Type': 'application/json' })
         res.end(JSON.stringify({ status: 'ok', bridge: true }))
+        return
+      }
+
+      // GET /printers/status (para debuggear)
+      if (req.url === '/printers/status' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ 
+          error: 'Use POST method with {ip, accessCode} in body',
+          example: { ip: '192.168.1.100', accessCode: '00000000' }
+        }))
+        return
+      }
+
+      // POST /printers/ping - Test rápido de conectividad
+      if (req.method === 'POST' && req.url === '/printers/ping') {
+        let body = ''
+        req.on('data', (chunk) => {
+          body += chunk.toString()
+        })
+
+        req.on('end', async () => {
+          try {
+            const { ip, accessCode } = JSON.parse(body)
+
+            if (!ip) {
+              res.writeHead(400, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: 'IP requerida' }))
+              return
+            }
+
+            console.log(`[BridgeService] Ping a ${ip}...`)
+
+            const result = await validatePrinter(ip, accessCode || '00000000')
+
+            if (result.success) {
+              res.writeHead(200, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ ok: true, message: 'Impresora responde' }))
+            } else {
+              res.writeHead(500, { 'Content-Type': 'application/json' })
+              res.end(JSON.stringify({ error: result.error }))
+            }
+          } catch (err) {
+            console.error('[BridgeService] Error en /printers/ping:', err)
+            res.writeHead(400, { 'Content-Type': 'application/json' })
+            res.end(JSON.stringify({ error: 'JSON inválido' }))
+          }
+        })
         return
       }
 

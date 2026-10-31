@@ -7,7 +7,7 @@ publish:
   provider: github
   owner: roloar7
   repo: RepuestosYa
-  releaseType: release
+  releaseType: draft
 win:
   target:
     - nsis

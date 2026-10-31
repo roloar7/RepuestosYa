@@ -26,6 +26,13 @@
   flex: 1;
 }
 
+.hintText {
+  margin: var(--space-sm, 8px) 0 0 0;
+  font-size: 12px;
+  color: var(--color-text-muted, #7A889C);
+  font-style: italic;
+}
+
 .retryBtn {
   display: flex;
   align-items: center;

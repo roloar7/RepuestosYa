@@ -8,9 +8,46 @@ const isDev = !app.isPackaged;
 let mainWindow = null;
 
 // Configurar electron-updater para GitHub Releases
-autoUpdater.checkForUpdatesAndNotify();
 autoUpdater.allowDowngrade = false;
 autoUpdater.autoDownload = false; // No descargar automáticamente
+autoUpdater.autoInstallOnAppQuit = true; // Instalar al cerrar la app
+
+// Configurar proveedor de GitHub
+if (!isDev) {
+  autoUpdater.setFeedURL({
+    provider: 'github',
+    owner: 'roloar7',
+    repo: 'RepuestosYa',
+  });
+  
+  console.log('[Updater] Configurado para GitHub releases');
+  console.log('[Updater] Feed URL: https://github.com/roloar7/RepuestosYa/releases');
+}
+
+// Listeners para actualizaciones
+autoUpdater.on('checking-for-update', () => {
+  console.log('[Updater] Verificando actualizaciones...');
+});
+
+autoUpdater.on('update-available', (info) => {
+  console.log('[Updater] Actualización disponible:', info.version);
+});
+
+autoUpdater.on('update-not-available', () => {
+  console.log('[Updater] App está actualizada');
+});
+
+autoUpdater.on('error', (err) => {
+  console.error('[Updater] Error:', err.message);
+});
+
+autoUpdater.on('download-progress', (progress) => {
+  console.log(`[Updater] Descargando: ${Math.round(progress.percent)}%`);
+});
+
+autoUpdater.on('update-downloaded', (info) => {
+  console.log('[Updater] Actualización descargada:', info.version);
+});
 
 /**
  * Validar impresora Bambu via MQTT
@@ -50,43 +87,55 @@ ipcMain.handle('updater:download-and-install', async (event) => {
     autoUpdater.removeAllListeners('update-downloaded');
     autoUpdater.removeAllListeners('error');
 
-    // Listener para progreso de descarga
-    autoUpdater.on('download-progress', (progress) => {
-      const percent = Math.round(progress.percent);
-      console.log(`[Updater] Progreso: ${percent}%`);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('updater:download-progress', percent);
-      }
+    return new Promise((resolve, reject) => {
+      // Listener para progreso de descarga
+      autoUpdater.on('download-progress', (progress) => {
+        const percent = Math.round(progress.percent);
+        console.log(`[Updater] Progreso: ${percent}%`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:download-progress', percent);
+        }
+      });
+
+      // Listener para cuando se descarga completamente
+      autoUpdater.once('update-downloaded', () => {
+        console.log('[Updater] Descarga completada, reiniciando e instalando...');
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:download-progress', 100);
+        }
+
+        resolve({
+          success: true,
+          message: 'Actualización lista para instalar',
+        });
+
+        // Instalar después de 1 segundo para que el UI se actualice
+        setTimeout(() => {
+          console.log('[Updater] Ejecutando quitAndInstall()...');
+          autoUpdater.quitAndInstall();
+        }, 1000);
+      });
+
+      // Listener para errores
+      autoUpdater.once('error', (error) => {
+        console.error('[Updater] Error durante actualización:', error);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('updater:download-error', error.message);
+        }
+        reject(error);
+      });
+
+      // Iniciar descarga
+      console.log('[Updater] Iniciando downloadUpdate()...');
+      autoUpdater.downloadUpdate()
+        .then((files) => {
+          console.log('[Updater] downloadUpdate() completado:', files);
+        })
+        .catch((err) => {
+          console.error('[Updater] downloadUpdate() error:', err);
+          reject(err);
+        });
     });
-
-    // Listener para cuando se descarga completamente
-    autoUpdater.on('update-downloaded', () => {
-      console.log('[Updater] Descarga completada, reiniciando e instalando...');
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('updater:download-progress', 100);
-      }
-      // Instalar después de 500ms para que el UI se actualice
-      setTimeout(() => {
-        autoUpdater.quitAndInstall();
-      }, 500);
-    });
-
-    // Listener para errores
-    autoUpdater.on('error', (error) => {
-      console.error('[Updater] Error durante actualización:', error);
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('updater:download-error', error.message);
-      }
-    });
-
-    // Descargar actualización
-    const updateInfo = await autoUpdater.downloadUpdate();
-    console.log('[Updater] Update info:', updateInfo);
-
-    return {
-      success: true,
-      message: 'Descarga iniciada...',
-    };
   } catch (error) {
     console.error('[Updater] Error:', error.message);
     return {

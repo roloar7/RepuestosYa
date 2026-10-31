@@ -2,6 +2,7 @@ import { useState } from "react"
 import { NavLink, useLocation } from "react-router-dom"
 import { navSections } from "../../navigation.js"
 import { icons } from "../iconMap.js"
+import { BiChevronDown } from "react-icons/bi"
 import logoSrc from "../../assets/Logo.svg"
 import styles from "./Sidebar.module.css"
 
@@ -72,7 +73,7 @@ function Sidebar({ collapsed, drawerOpen }) {
                       )}
                       <span className={styles.linkLabel}>{item.label}</span>
                       <span className={`${styles.chevron} ${open ? styles.chevronOpen : ""}`}>
-                        <icons.chevron size={16} />
+                        <BiChevronDown size={16} />
                       </span>
                     </button>
 

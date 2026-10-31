@@ -123,11 +123,19 @@ export default function UpdateElectron() {
       if (window.electron?.updater?.downloadAndInstall) {
         const result = await window.electron.updater.downloadAndInstall()
 
+        console.log('[UpdateElectron] Resultado:', result)
+
         if (!result.success) {
           setError(result.error)
           setDownloading(false)
+        } else {
+          console.log('[UpdateElectron] Descarga completada, app se reiniciará automáticamente')
+          // La app se reinicia automáticamente vía quitAndInstall()
         }
-        // Si es exitoso, la app se reinicia automáticamente
+      } else {
+        console.error('[UpdateElectron] downloadAndInstall no disponible')
+        setError('Actualización no disponible en este navegador')
+        setDownloading(false)
       }
     } catch (err) {
       console.error('[UpdateElectron] Error:', err)

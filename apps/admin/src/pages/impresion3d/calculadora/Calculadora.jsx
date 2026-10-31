@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { CalculatorIcon } from "../../../components/icons.jsx"
+import { BiCalculator } from "react-icons/bi"
 import {
   MATERIALS,
   PRICE_PER_HOUR,
@@ -60,7 +60,7 @@ function Calculadora() {
         <form className={styles.panel} onSubmit={(event) => event.preventDefault()}>
           <header className={styles.panelHead}>
             <span className={styles.panelIcon}>
-              <CalculatorIcon />
+              <BiCalculator />
             </span>
             <div>
               <h3 className={styles.panelTitle}>Calculador de costos y precio final</h3>

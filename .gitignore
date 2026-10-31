@@ -21,6 +21,7 @@ out
 *.asar
 *.7z.tmp
 *.exe
+*release
 
 # Editor directories and files
 .vscode/*

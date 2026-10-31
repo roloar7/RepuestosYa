@@ -1,13 +1,7 @@
 import { Link } from "react-router-dom"
+import { BiPulse, BiPackage, BiClipboard, BiTime, BiLayer } from "react-icons/bi"
 import { useAuthContext } from "../../hooks/useAuthContext.js"
 import { useProfile } from "../../hooks/useProfile.js"
-import {
-  ActivityIcon,
-  BoxIcon,
-  ClipboardIcon,
-  ClockIcon,
-  LayersIcon,
-} from "../../components/icons.jsx"
 import styles from "./Inicio.module.css"
 
 const stats = [
@@ -17,7 +11,7 @@ const stats = [
     value: "12",
     delta: "3 imprimiendo",
     tone: "primary",
-    icon: <LayersIcon />,
+    icon: <BiLayer />,
   },
   {
     id: "queue",
@@ -25,7 +19,7 @@ const stats = [
     value: "8",
     delta: "2 en pausa",
     tone: "accent",
-    icon: <ClockIcon />,
+    icon: <BiTime />,
   },
   {
     id: "stock",
@@ -33,7 +27,7 @@ const stats = [
     value: "1.248",
     delta: "+36 esta semana",
     tone: "success",
-    icon: <BoxIcon />,
+    icon: <BiPackage />,
   },
   {
     id: "orders",
@@ -41,7 +35,7 @@ const stats = [
     value: "156",
     delta: "ARS 2,4M vendidos",
     tone: "info",
-    icon: <ClipboardIcon />,
+    icon: <BiClipboard />,
   },
 ]
 
@@ -126,7 +120,7 @@ function Inicio() {
               <p className={styles.productionLabel}>impresoras en uso</p>
             </div>
             <span className={`${styles.statIcon} ${styles.tone_primary}`}>
-              <ActivityIcon />
+              <BiPulse />
             </span>
           </div>
 

@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { Link, useLocation } from "react-router-dom"
+import { BiBell, BiMenu, BiSearch, BiUserCircle } from "react-icons/bi"
 import { resolveTitle } from "../../navigation.js"
 import { useAuthContext } from "../../hooks/useAuthContext.js"
 import { useProfile } from "../../hooks/useProfile.js"
 import { USER_ROLE_LABELS } from "../../constants/userRoles.js"
-import { BellIcon, MenuIcon, SearchIcon, UserCircleIcon } from "../icons.jsx"
 import UpdateElectron from "../UpdateElectron.jsx"
 import DownloadWeb from "../DownloadWeb.jsx"
 import styles from "./Navbar.module.css"
@@ -37,7 +37,7 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
         aria-expanded={isCompact ? drawerOpen : undefined}
         aria-controls="admin-sidebar"
       >
-        <MenuIcon />
+        <BiMenu />
       </button>
 
       <h1 className={styles.title}>{title}</h1>
@@ -45,7 +45,7 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
       <div className={styles.spacer} />
 
       <label className={styles.search}>
-        <SearchIcon size={18} />
+        <BiSearch size={18} />
         <input type="search" placeholder="Buscar repuestos, pedidos, impresoras..." />
       </label>
 
@@ -57,11 +57,11 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
         aria-expanded={searchOpen}
         aria-controls="navbar-search-bar"
       >
-        <SearchIcon />
+        <BiSearch />
       </button>
 
       <button type="button" className={styles.iconBtn} aria-label="Notificaciones">
-        <BellIcon />
+        <BiBell />
         <span className={styles.badgeDot} />
       </button>
 
@@ -78,7 +78,7 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
         </button>
         <div className={styles.dropdownMenu}>
           <Link to="/perfil" className={styles.dropdownLink}>
-            <UserCircleIcon size={18} />
+            <BiUserCircle size={18} />
             Mi Perfil
           </Link>
           <button
@@ -96,7 +96,7 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
         className={`${styles.searchBar} ${searchOpen ? styles.searchBarOpen : ""}`}
       >
         <label className={styles.mobileSearch}>
-          <SearchIcon size={18} />
+          <BiSearch size={18} />
           <input
             type="search"
             placeholder="Buscar repuestos, pedidos, impresoras..."

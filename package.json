@@ -12,6 +12,7 @@
     "preview": "pnpm --filter admin preview"
   },
   "dependencies": {
+    "@boxicons/react": "^1.0.3",
     "@supabase/supabase-js": "^2.118.0"
   }
 }

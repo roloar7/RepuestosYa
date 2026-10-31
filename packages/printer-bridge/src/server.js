@@ -6,50 +6,196 @@ const PORT = process.env.BRIDGE_PORT || 8787
 // Store de conexiones activas por IP
 const connections = new Map()
 
-async function validatePrinter(ip) {
-  console.log(`[Bridge] Validando impresora en ${ip}...`)
+/**
+ * Obtener estado actual de la impresora vía MQTT
+ * Se suscribe a los topics de reporte y obtiene datos
+ */
+async function getPrinterStatus(ip, accessCode = "00000000") {
+  console.log(`[Bridge] Obteniendo estado de ${ip}...`)
 
   return new Promise((resolve) => {
+    let resolved = false
     const timeoutId = setTimeout(() => {
-      console.log(`[Bridge] Timeout al conectar a ${ip}`)
-      resolve({ success: false, error: "Timeout: no hay respuesta de la impresora" })
+      if (!resolved) {
+        resolved = true
+        console.log(`[Bridge] Timeout obteniendo estado de ${ip}`)
+        resolve({ success: false, error: "Timeout: no hay respuesta de la impresora" })
+      }
     }, 10000)
 
     try {
-      // URL MQTT: mqtt://<user>:<pass>@<ip>:8883
-      // Para Bambu: user=bblp, pass=access_code (el código LAN de developer mode)
-      // Por ahora, asumimos que el access_code se pasa después o está en una config
-      const brokerUrl = `mqtt://bblp:unknown@${ip}:8883`
+      const brokerUrl = `mqtts://bblp:${accessCode}@${ip}:8883`
 
       const client = mqtt.connect(brokerUrl, {
-        rejectUnauthorized: false, // TLS self-signed (Bambu)
-        connectTimeout: 5000,
-        reconnectPeriod: 0, // No intentar reconectar automáticamente
+        rejectUnauthorized: false,
+        protocol: "mqtts",
+        port: 8883,
+        host: ip,
+        username: "bblp",
+        password: accessCode,
+        connectTimeout: 8000,
+        keepalive: 30,
+        clean: true,
+        clientId: `RepuestosYa-status-${Date.now()}`,
+        reconnectPeriod: 0,
       })
 
+      const statusData = {
+        online: false,
+        state: "unknown",
+        temperature: null,
+        serial: null,
+      }
+
       client.on("connect", () => {
-        console.log(`[Bridge] Conectado a ${ip}`)
-        client.end()
-        clearTimeout(timeoutId)
-        resolve({ success: true, serial: null }) // Serial se obtendría del MQTT report
+        console.log(`[Bridge] Conectado a ${ip}, suscribiendo a topics...`)
+        
+        // Suscribirse a topics de reporte de Bambu
+        client.subscribe("device/+/report", (err) => {
+          if (err) {
+            console.error(`[Bridge] Error suscribirse a reports en ${ip}:`, err.message)
+          }
+        })
+      })
+
+      client.on("message", (topic, message) => {
+        try {
+          const data = JSON.parse(message.toString())
+          console.log(`[Bridge] Mensaje recibido de ${ip}:`, topic)
+          
+          statusData.online = true
+          
+          // Extraer datos del report
+          if (data.print && data.print.state) {
+            statusData.state = data.print.state
+          }
+          
+          if (data.nozzle_temper !== undefined) {
+            statusData.temperature = data.nozzle_temper
+          }
+          
+          if (data.sn) {
+            statusData.serial = data.sn
+          }
+
+          // Desconectar después de recibir datos
+          if (!resolved) {
+            resolved = true
+            clearTimeout(timeoutId)
+            client.end()
+            resolve({ success: true, ...statusData })
+          }
+        } catch (err) {
+          console.error(`[Bridge] Error procesando mensaje de ${ip}:`, err.message)
+        }
       })
 
       client.on("error", (err) => {
-        console.log(`[Bridge] Error MQTT en ${ip}:`, err.message)
+        if (resolved) return
+        resolved = true
+        console.error(`[Bridge] Error obteniendo estado de ${ip}:`, err.message)
         clearTimeout(timeoutId)
-        // Si falla auth (password), lo intentamos de todas formas
-        // En producción validaríamos el access_code primero
+        client.end()
         resolve({
           success: false,
-          error: `No se puede conectar a ${ip}: ${err.message}`,
+          error: `Error MQTT: ${err.message}`,
         })
       })
 
       client.on("offline", () => {
-        console.log(`[Bridge] Desconectado de ${ip}`)
+        if (resolved) return
+        console.warn(`[Bridge] Impresora offline: ${ip}`)
       })
     } catch (err) {
-      console.error(`[Bridge] Excepción en validatePrinter:`, err)
+      if (resolved) return
+      resolved = true
+      console.error(`[Bridge] Excepción en getPrinterStatus:`, err.message)
+      clearTimeout(timeoutId)
+      resolve({ success: false, error: err.message })
+    }
+  })
+}
+
+async function validatePrinter(ip, accessCode = "00000000") {
+  console.log(`[Bridge] Validando impresora en ${ip}...`)
+
+  return new Promise((resolve) => {
+    let resolved = false
+    const timeoutId = setTimeout(() => {
+      if (!resolved) {
+        resolved = true
+        console.log(`[Bridge] Timeout al conectar a ${ip}`)
+        resolve({ success: false, error: "Timeout: no hay respuesta de la impresora en 10 segundos" })
+      }
+    }, 10000)
+
+    try {
+      // Para Bambu Lab:
+      // - Puerto 8883 = MQTT sobre TLS
+      // - Usuario: "bblp" (Bambu Lab LAN Protocol)
+      // - Password: access_code (código de desarrollador en la impresora)
+      // - Si no tienes access_code, usa "00000000" (default)
+      const brokerUrl = `mqtts://bblp:${accessCode}@${ip}:8883`
+
+      console.log(`[Bridge] Intentando conectar a ${brokerUrl} (sin verificar certificado)...`)
+
+      const client = mqtt.connect(brokerUrl, {
+        // TLS/SSL options
+        rejectUnauthorized: false, // Bambu usa certificados auto-firmados
+        ca: undefined, // Ignorar CA validation
+        key: undefined,
+        cert: undefined,
+        
+        // Conexión
+        protocol: "mqtts",
+        port: 8883,
+        host: ip,
+        username: "bblp",
+        password: accessCode,
+        
+        // Timeouts
+        connectTimeout: 8000, // 8 segundos para conectar
+        keepalive: 30, // Ping cada 30 segundos
+        
+        // Reconexión (solo para testing, después desactivar)
+        clean: true,
+        clientId: `RepuestosYa-validator-${Date.now()}`,
+        reconnectPeriod: 0, // No reconectar automáticamente
+      })
+
+      client.on("connect", () => {
+        if (resolved) return
+        resolved = true
+        console.log(`[Bridge] ✓ Conectado a ${ip}`)
+        clearTimeout(timeoutId)
+        client.end()
+        resolve({ success: true, serial: null, message: "Impresora accesible" })
+      })
+
+      client.on("error", (err) => {
+        if (resolved) return
+        resolved = true
+        console.error(`[Bridge] ✗ Error MQTT en ${ip}:`, err.message)
+        clearTimeout(timeoutId)
+        client.end()
+        resolve({
+          success: false,
+          error: `Error de conexión MQTT: ${err.message}`,
+          details: "Verifica IP, puerto 8883 abierto, y access code correcto",
+        })
+      })
+
+      client.on("offline", () => {
+        console.warn(`[Bridge] Impresora desconectada: ${ip}`)
+      })
+
+      client.on("disconnect", () => {
+        console.log(`[Bridge] Desconexión de ${ip}`)
+      })
+    } catch (err) {
+      if (resolved) return
+      resolved = true
+      console.error(`[Bridge] Excepción al validar ${ip}:`, err.message)
       clearTimeout(timeoutId)
       resolve({ success: false, error: err.message })
     }
@@ -75,7 +221,7 @@ const server = http.createServer(async (req, res) => {
 
     req.on("end", async () => {
       try {
-        const { name, ip } = JSON.parse(body)
+        const { name, ip, accessCode } = JSON.parse(body)
 
         if (!ip) {
           res.writeHead(400, { "Content-Type": "application/json" })
@@ -83,17 +229,56 @@ const server = http.createServer(async (req, res) => {
           return
         }
 
-        const result = await validatePrinter(ip)
+        console.log(`[Bridge] Validando: ${name || "?"} en ${ip}${accessCode ? " con access code" : " (sin access code)"}`)
+
+        const result = await validatePrinter(ip, accessCode || "00000000")
 
         if (result.success) {
           res.writeHead(200, { "Content-Type": "application/json" })
-          res.end(JSON.stringify({ ok: true, serial: result.serial }))
+          res.end(JSON.stringify({ ok: true, serial: result.serial, message: result.message }))
         } else {
           res.writeHead(500, { "Content-Type": "application/json" })
-          res.end(JSON.stringify({ error: result.error }))
+          res.end(JSON.stringify({ error: result.error, details: result.details }))
         }
       } catch (err) {
         console.error("[Bridge] Error en /printers/validate:", err)
+        res.writeHead(400, { "Content-Type": "application/json" })
+        res.end(JSON.stringify({ error: "JSON inválido o error procesando validación" }))
+      }
+    })
+    return
+  }
+
+  // Obtener estado de la impresora (suscribirse a topics)
+  if (req.method === "POST" && req.url === "/printers/status") {
+    let body = ""
+    req.on("data", (chunk) => {
+      body += chunk.toString()
+    })
+
+    req.on("end", async () => {
+      try {
+        const { ip, accessCode } = JSON.parse(body)
+
+        if (!ip) {
+          res.writeHead(400, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: "IP requerida" }))
+          return
+        }
+
+        console.log(`[Bridge] Obteniendo estado de ${ip}...`)
+
+        const status = await getPrinterStatus(ip, accessCode || "00000000")
+
+        if (status.success) {
+          res.writeHead(200, { "Content-Type": "application/json" })
+          res.end(JSON.stringify(status))
+        } else {
+          res.writeHead(500, { "Content-Type": "application/json" })
+          res.end(JSON.stringify({ error: status.error }))
+        }
+      } catch (err) {
+        console.error("[Bridge] Error en /printers/status:", err)
         res.writeHead(400, { "Content-Type": "application/json" })
         res.end(JSON.stringify({ error: "JSON inválido" }))
       }
@@ -113,8 +298,15 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`🖨️ [Bridge] Corriendo en http://localhost:${PORT}`)
-  console.log(`   POST /printers/validate — Validar conexión a impresora`)
-  console.log(`   GET /health — Estado del bridge`)
+  console.log(`\n📍 Endpoints disponibles:`)
+  console.log(`   POST /printers/validate`)
+  console.log(`      Body: { ip, name?, accessCode? }`)
+  console.log(`      → Valida conexión MQTT a impresora Bambu\n`)
+  console.log(`   POST /printers/status`)
+  console.log(`      Body: { ip, accessCode? }`)
+  console.log(`      → Obtiene estado actual (temperatura, estado de impresión, serial)\n`)
+  console.log(`   GET /health`)
+  console.log(`      → Estado del bridge\n`)
 })
 
 process.on("SIGINT", () => {

@@ -1,13 +1,9 @@
 import { useState, useEffect } from "react"
-import {
-  PlayIcon,
-  PlusIcon,
-  PrinterIcon,
-  SearchIcon,
-} from "../../../components/icons.jsx"
+import { BiPlay, BiPlus, BiPrinter, BiSearch, BiTrash } from "react-icons/bi"
 import { useAuthContext } from "../../../hooks/useAuthContext.js"
 import { usePrinters } from "../../../hooks/usePrinters.js"
 import { AddPrinterModal } from "./AddPrinterModal.jsx"
+import { DeletePrinterModal } from "./DeletePrinterModal.jsx"
 import styles from "./Granja.module.css"
 
 const statusMeta = {
@@ -27,13 +23,13 @@ function StatusBadge({ status }) {
   )
 }
 
-function PrinterCard({ printer }) {
+function PrinterCard({ printer, onDelete }) {
 
   return (
     <article className={styles.card}>
       <header className={styles.cardHead}>
         <span className={styles.cardIcon}>
-          <PrinterIcon />
+          <BiPrinter size={20} />
         </span>
         <div className={styles.cardTitle}>
           <p className={styles.printerName}>{printer.name}</p>
@@ -51,15 +47,20 @@ function PrinterCard({ printer }) {
       </div>
 
       <footer className={styles.cardFoot}>
-        <button type="button" className={styles.ghostBtn}>
-          Detalle
+        <button 
+          type="button" 
+          className={styles.ghostBtn}
+          onClick={() => onDelete(printer)}
+          title="Eliminar impresora"
+        >
+          <BiTrash size={16} /> Eliminar
         </button>
         <button
           type="button"
           className={styles.solidBtn}
           disabled={printer.status === "offline"}
         >
-          <PlayIcon size={16} /> Imprimir
+          <BiPlay size={16} /> Imprimir
         </button>
       </footer>
     </article>
@@ -68,9 +69,11 @@ function PrinterCard({ printer }) {
 
 function Granja() {
   const { user } = useAuthContext()
-  const { printers, loading: printersLoading, addPrinter } = usePrinters(user?.id)
+  const { printers, loading: printersLoading, addPrinter, deletePrinter } = usePrinters(user?.id)
   const [query, setQuery] = useState("")
   const [showAddModal, setShowAddModal] = useState(false)
+  const [printerToDelete, setPrinterToDelete] = useState(null)
+  const [deleting, setDeleting] = useState(false)
 
   const filtered = printers.filter((printer) =>
     `${printer.name} ${printer.ip}`
@@ -82,6 +85,23 @@ function Granja() {
     printing: printers.filter((p) => p.status === "printing").length,
     idle: printers.filter((p) => p.status === "idle").length,
     offline: printers.filter((p) => p.status === "offline").length,
+  }
+
+  const handleDeleteConfirm = async () => {
+    if (!printerToDelete) return
+    
+    try {
+      setDeleting(true)
+      const result = await deletePrinter(printerToDelete.id)
+      
+      if (result.success) {
+        setPrinterToDelete(null)
+      } else {
+        console.error("Error al eliminar:", result.error)
+      }
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -107,7 +127,7 @@ function Granja() {
 
         <div className={styles.toolbarActions}>
           <label className={styles.search}>
-            <SearchIcon size={16} />
+            <BiSearch size={16} />
             <input
               type="search"
               placeholder="Buscar impresora..."
@@ -116,7 +136,7 @@ function Granja() {
             />
           </label>
           <button type="button" className={styles.addBtn} onClick={() => setShowAddModal(true)}>
-            <PlusIcon size={18} /> Agregar impresora
+            <BiPlus size={18} /> Agregar impresora
           </button>
         </div>
       </div>
@@ -128,9 +148,17 @@ function Granja() {
         loading={printersLoading}
       />
 
+      <DeletePrinterModal
+        isOpen={!!printerToDelete}
+        printer={printerToDelete}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setPrinterToDelete(null)}
+        loading={deleting}
+      />
+
       {filtered.length === 0 ? (
         <div className={styles.empty}>
-          <PrinterIcon size={28} />
+          <BiPrinter size={28} />
           <p>
             {printers.length === 0
               ? "No hay impresoras agregadas. Haz click en 'Agregar impresora' para comenzar."
@@ -140,7 +168,11 @@ function Granja() {
       ) : (
         <div className={styles.grid}>
           {filtered.map((printer) => (
-            <PrinterCard key={printer.id} printer={printer} />
+            <PrinterCard 
+              key={printer.id} 
+              printer={printer}
+              onDelete={setPrinterToDelete}
+            />
           ))}
         </div>
       )}

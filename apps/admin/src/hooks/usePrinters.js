@@ -21,10 +21,10 @@ export function usePrinters(userId) {
     async function fetchPrinters() {
       try {
         setLoading(true)
+        // Ver TODAS las impresoras, no solo las del usuario
         const { data, error: err } = await supabase
           .from("printers")
           .select("*")
-          .eq("user_id", userId)
           .order("created_at", { ascending: false })
 
         if (err) throw err
@@ -43,14 +43,13 @@ export function usePrinters(userId) {
 
     // Suscribirse a cambios en tiempo real (Supabase Realtime v2)
     const channel = supabase
-      .channel(`printers-${userId}`)
+      .channel(`printers-all`)
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
           table: "printers",
-          filter: `user_id=eq.${userId}`,
         },
         (_payload) => {
           console.log("[Realtime] Printer update")
@@ -69,10 +68,9 @@ export function usePrinters(userId) {
   }, [userId])
 
   /**
-   * Validar impresora y agregarla a la BD
-   * Solo disponible en Electron (requiere IPC con bridge embebido)
+   * Agregar impresora a la BD
    */
-  const addPrinter = async (name, ip, accessCode = "unknown") => {
+  const addPrinter = async (name, ip, accessCode = "00000000") => {
     if (!userId || !name?.trim() || !ip?.trim()) {
       return { success: false, error: "Nombre e IP son requeridos" }
     }
@@ -80,25 +78,7 @@ export function usePrinters(userId) {
     try {
       setLoading(true)
 
-      // Validar que Electron está disponible
-      if (!window.electron?.bridge?.validatePrinter) {
-        return {
-          success: false,
-          error: "Esta función solo está disponible en la aplicación",
-        }
-      }
-
-      console.log("[usePrinters] Validando impresora via Electron IPC")
-      const result = await window.electron.bridge.validatePrinter(
-        name,
-        ip,
-        accessCode
-      )
-      if (!result.success) {
-        return { success: false, error: result.error }
-      }
-
-      const validationData = result
+      console.log("[usePrinters] Agregando impresora:", name)
 
       // Guardar en Supabase
       const { data, error: err } = await supabase
@@ -107,8 +87,8 @@ export function usePrinters(userId) {
           {
             name: name.trim(),
             ip: ip.trim(),
-            access_code: accessCode || null, // Guardar access code (cifrar en prod)
-            serial: validationData.serial || null,
+            access_code: accessCode || null,
+            serial: null,
             status: "idle",
             user_id: userId,
           },
@@ -176,31 +156,6 @@ export function usePrinters(userId) {
     }
   }
 
-  /**
-   * Obtener estado en tiempo real de la impresora (temperatura, etc.)
-   * Usa el HTTP Bridge para conectarse vía MQTT
-   */
-  const getPrinterStatus = async (ip, accessCode = "00000000") => {
-    try {
-      const response = await fetch("http://localhost:8787/printers/status", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ip, accessCode }),
-      })
-
-      if (!response.ok) {
-        const error = await response.json()
-        return { success: false, error: error.error }
-      }
-
-      const status = await response.json()
-      return { success: true, ...status }
-    } catch (err) {
-      console.error("[usePrinters] Error obteniendo estado:", err)
-      return { success: false, error: err.message }
-    }
-  }
-
   return {
     printers,
     loading,
@@ -208,6 +163,5 @@ export function usePrinters(userId) {
     addPrinter,
     deletePrinter,
     updatePrinterStatus,
-    getPrinterStatus,
   }
 }

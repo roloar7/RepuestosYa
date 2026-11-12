@@ -33,13 +33,10 @@ export default function UpdateElectron() {
         // Obtener versión actual
         const versionInfo = await window.electron.updater.getVersion()
         setCurrentVersion(versionInfo.currentVersion)
-        console.log('[UpdateElectron] Versión actual:', versionInfo.currentVersion)
 
         // Obtener última release de GitHub
         const GITHUB_OWNER = import.meta.env.VITE_GITHUB_OWNER || 'roloar7'
         const GITHUB_REPO = import.meta.env.VITE_GITHUB_REPO || 'RepuestosYa'
-
-        console.log(`[UpdateElectron] Verificando releases: ${GITHUB_OWNER}/${GITHUB_REPO}`)
 
         const response = await fetch(
           `https://api.github.com/repos/${GITHUB_OWNER}/${GITHUB_REPO}/releases/latest`,
@@ -51,7 +48,6 @@ export default function UpdateElectron() {
         )
 
         if (!response.ok) {
-          console.error('[UpdateElectron] GitHub API error:', response.status)
           setError('No se pudo verificar actualizaciones')
           setLoading(false)
           return
@@ -60,21 +56,12 @@ export default function UpdateElectron() {
         const release = await response.json()
         const version = release.tag_name?.replace('v', '')
 
-        console.log('[UpdateElectron] Última versión en GitHub:', version)
-
         setNewVersion(version)
 
         // Comparar versiones (simple: v1.0.1 > v1.0.0)
         const isNewer = compareVersions(version, versionInfo.currentVersion)
         setHasUpdate(isNewer)
-
-        if (isNewer) {
-          console.log('[UpdateElectron] Actualización disponible')
-        } else {
-          console.log('[UpdateElectron] Ya está actualizado')
-        }
       } catch (err) {
-        console.error('[UpdateElectron] Error:', err.message)
         setError(err.message)
       } finally {
         setLoading(false)
@@ -90,9 +77,7 @@ export default function UpdateElectron() {
       return
     }
 
-    // Usar el listener expuesto en preload.js
     const unsubscribe = window.electron.updater.onDownloadProgress((progress) => {
-      console.log('[UpdateElectron] Progreso:', progress)
       setDownloadProgress(progress)
     })
 
@@ -117,12 +102,9 @@ export default function UpdateElectron() {
       setError(null)
       setDownloadProgress(0)
 
-      console.log('[UpdateElectron] Verificando actualizaciones antes de descargar...')
-
-      // Primero, verificar si hay actualizaciones disponibles
+      // Verificar si hay actualizaciones disponibles
       if (window.electron?.updater?.checkForUpdates) {
         const checkResult = await window.electron.updater.checkForUpdates()
-        console.log('[UpdateElectron] Resultado de verificación:', checkResult)
 
         if (!checkResult.hasUpdate) {
           setError('No hay actualizaciones disponibles')
@@ -131,28 +113,20 @@ export default function UpdateElectron() {
         }
       }
 
-      console.log('[UpdateElectron] Iniciando descarga de v' + newVersion)
-
-      // Usar electron-updater si está disponible
+      // Usar electron-updater
       if (window.electron?.updater?.downloadAndInstall) {
         const result = await window.electron.updater.downloadAndInstall()
-
-        console.log('[UpdateElectron] Resultado:', result)
 
         if (!result.success) {
           setError(result.error)
           setDownloading(false)
-        } else {
-          console.log('[UpdateElectron] Descarga completada, app se reiniciará automáticamente')
-          // La app se reinicia automáticamente vía quitAndInstall()
         }
+        // La app se reinicia automáticamente vía quitAndInstall()
       } else {
-        console.error('[UpdateElectron] downloadAndInstall no disponible')
         setError('Actualización no disponible en este navegador')
         setDownloading(false)
       }
     } catch (err) {
-      console.error('[UpdateElectron] Error:', err)
       setError(err.message)
       setDownloading(false)
     }

@@ -7,6 +7,7 @@ import Inicio from "./pages/inicio/Inicio.jsx"
 import Impresion3DLayout from "./pages/impresion3d/Impresion3DLayout.jsx"
 import Granja from "./pages/impresion3d/granja/Granja.jsx"
 import Calculadora from "./pages/impresion3d/calculadora/Calculadora.jsx"
+import Archivos from "./pages/impresion3d/archivos/Archivos.jsx"
 import { Navigate, Route, Routes } from "react-router-dom"
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
             <Route index element={<Navigate to="granja" replace />} />
             <Route path="granja" element={<Granja />} />
             <Route path="calculadora" element={<Calculadora />} />
+            <Route path="archivos" element={<Archivos />} />
           </Route>
           <Route path="perfil" element={<Perfil />} />
           <Route path="*" element={<Navigate to="/" replace />} />

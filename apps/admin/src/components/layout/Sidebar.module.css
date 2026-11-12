@@ -220,6 +220,15 @@
   padding: 10px 12px;
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.05);
+  transition: all 0.3s ease;
+}
+
+.footerCard.disconnected {
+  background: rgba(200, 55, 74, 0.1);
+}
+
+.footerCard.connected {
+  background: rgba(46, 139, 87, 0.1);
 }
 
 .footerDot {
@@ -229,6 +238,27 @@
   background: var(--color-warning);
   box-shadow: 0 0 0 3px rgba(217, 119, 6, 0.2);
   flex: none;
+  transition: all 0.3s ease;
+}
+
+.disconnected .footerDot {
+  background: var(--color-danger, #C8374A);
+  box-shadow: 0 0 0 3px rgba(200, 55, 74, 0.2);
+}
+
+.connected .footerDot {
+  background: var(--color-success, #2E8B57);
+  box-shadow: 0 0 0 3px rgba(46, 139, 87, 0.2);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
 }
 
 .footerText {
@@ -246,6 +276,17 @@
 .footerText span {
   color: var(--admin-sidebar-text);
   opacity: 0.75;
+  transition: color 0.3s ease;
+}
+
+.disconnected .footerText span {
+  color: var(--color-danger, #C8374A);
+  opacity: 1;
+}
+
+.connected .footerText span {
+  color: var(--color-success, #2E8B57);
+  opacity: 1;
 }
 
 .collapsed .brandText,

@@ -3,7 +3,7 @@ import { supabase } from "@repuestos-ya/supabase"
 
 /**
  * Hook para gestionar impresoras
- * Solo disponible en Electron (requiere window.electron.bridge)
+ * Solo disponible en Electron (requiere window.electron.printer)
  */
 export function usePrinters(userId) {
   const [printers, setPrinters] = useState([])
@@ -68,9 +68,9 @@ export function usePrinters(userId) {
   }, [userId])
 
   /**
-   * Agregar impresora a la BD
+   * Agregar impresora a la BD y conectar MQTT en Electron
    */
-  const addPrinter = async (name, ip, accessCode = "00000000") => {
+  const addPrinter = async (name, ip, accessCode = "00000000", serialNumber = "") => {
     if (!userId || !name?.trim() || !ip?.trim()) {
       return { success: false, error: "Nombre e IP son requeridos" }
     }
@@ -88,7 +88,7 @@ export function usePrinters(userId) {
             name: name.trim(),
             ip: ip.trim(),
             access_code: accessCode || null,
-            serial: null,
+            serial_number: serialNumber || null,
             status: "idle",
             user_id: userId,
           },
@@ -97,6 +97,21 @@ export function usePrinters(userId) {
         .single()
 
       if (err) throw err
+
+      // Conectar a MQTT en Electron si está disponible
+      if (window.electron?.printer?.connect && serialNumber?.trim()) {
+        try {
+          await window.electron.printer.connect({
+            id: data.id,
+            ip: ip.trim(),
+            access_code: accessCode || "00000000",
+            serial_number: serialNumber.trim(),
+          })
+        } catch (mqttErr) {
+          console.error("[usePrinters] Error conectando MQTT:", mqttErr.message)
+          // No fallar aunque falle MQTT, la impresora está en BD
+        }
+      }
 
       setPrinters((prev) => [data, ...prev])
       return { success: true, printer: data }
@@ -115,6 +130,15 @@ export function usePrinters(userId) {
    */
   const deletePrinter = async (printerId) => {
     try {
+      // Desconectar MQTT en Electron si está disponible
+      if (window.electron?.printer?.disconnect) {
+        try {
+          await window.electron.printer.disconnect(printerId)
+        } catch (mqttErr) {
+          console.error("[usePrinters] Error desconectando MQTT:", mqttErr.message)
+        }
+      }
+
       const { error: err } = await supabase
         .from("printers")
         .delete()

@@ -1,7 +1,8 @@
-import { useState } from "react"
-import { BiPlay, BiPlus, BiPrinter, BiSearch, BiTrash } from "react-icons/bi"
+import { useState, useEffect } from "react"
+import { BiPlay, BiPlus, BiPrinter, BiTrash } from "react-icons/bi"
 import { useAuthContext } from "../../../hooks/useAuthContext.js"
 import { usePrinters } from "../../../hooks/usePrinters.js"
+import { usePrinterTelemetry } from "../../../hooks/usePrinterTelemetry.js"
 import { AddPrinterModal } from "./AddPrinterModal.jsx"
 import { DeletePrinterModal } from "./DeletePrinterModal.jsx"
 
@@ -14,7 +15,23 @@ const statusMeta = {
   error: { label: "Error", tone: "danger" },
 }
 
-function StatusBadge({ status }) {
+function StatusBadge({ printer, telemetry }) {
+  // Determinar estado real basado en telemetría
+  let status = printer.status
+  
+  const data = telemetry[printer.id]
+  if (data) {
+    // Si hay telemetría, usar el gcode_state
+    if (data.gcode_state === 'IDLE' || data.gcode_state === 'PAUSE') {
+      status = 'idle'
+    } else if (data.gcode_state === 'RUNNING' || data.gcode_state === 'PRINTING') {
+      status = 'printing'
+    }
+  } else if (printer.status !== 'offline') {
+    // Sin telemetría pero debería estar conectado
+    status = 'offline'
+  }
+
   const meta = statusMeta[status]
   return (
     <span className={`${styles.badge} ${styles[`tone_${meta.tone}`]}`}>
@@ -24,7 +41,9 @@ function StatusBadge({ status }) {
   )
 }
 
-function PrinterCard({ printer, onDelete }) {
+function PrinterCard({ printer, telemetry, onDelete }) {
+  const data = telemetry[printer.id]
+  
   return (
     <article className={styles.card}>
       <header className={styles.cardHead}>
@@ -35,15 +54,34 @@ function PrinterCard({ printer, onDelete }) {
           <p className={styles.printerName}>{printer.name}</p>
           <p className={styles.printerModel}>{printer.ip}</p>
         </div>
-        <StatusBadge status={printer.status} />
+        <StatusBadge printer={printer} telemetry={telemetry} />
       </header>
 
       <div className={styles.cardBody}>
-        <p className={styles.idleText}>
-          {printer.status === "offline"
-            ? "Sin conexión con la impresora."
-            : "Lista para recibir un trabajo."}
-        </p>
+        {data ? (
+          <>
+            <div className={styles.telemetry}>
+              <div className={styles.tempItem}>
+                <span className={styles.tempLabel}>Nozzle</span>
+                <span className={styles.tempValue}>{data.nozzle_temp}°C</span>
+              </div>
+              <div className={styles.tempItem}>
+                <span className={styles.tempLabel}>Cama</span>
+                <span className={styles.tempValue}>{data.bed_temp}°C</span>
+              </div>
+              <div className={styles.tempItem}>
+                <span className={styles.tempLabel}>Progreso</span>
+                <span className={styles.tempValue}>{data.progress}%</span>
+              </div>
+            </div>
+          </>
+        ) : (
+          <p className={styles.idleText}>
+            {printer.status === "offline"
+              ? "Sin conexión con la impresora."
+              : "Esperando conexión..."}
+          </p>
+        )}
       </div>
 
       <footer className={styles.cardFoot}>
@@ -58,7 +96,7 @@ function PrinterCard({ printer, onDelete }) {
         <button
           type="button"
           className={styles.solidBtn}
-          disabled={printer.status === "offline"}
+          disabled={!data || data.gcode_state === 'IDLE'}
         >
           <BiPlay size={16} /> Imprimir
         </button>
@@ -69,22 +107,42 @@ function PrinterCard({ printer, onDelete }) {
 
 function Granja() {
   const { user } = useAuthContext()
-  const { printers, loading: printersLoading, addPrinter, deletePrinter, getPrinterStatus } = usePrinters(user?.id)
-  const [query, setQuery] = useState("")
+  const { printers, loading: printersLoading, addPrinter, deletePrinter } = usePrinters(user?.id)
+  const telemetry = usePrinterTelemetry()
   const [showAddModal, setShowAddModal] = useState(false)
   const [printerToDelete, setPrinterToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  const filtered = printers.filter((printer) =>
-    `${printer.name} ${printer.ip}`
-      .toLowerCase()
-      .includes(query.trim().toLowerCase()),
-  )
+  // Reconectar impresoras al cargar la página
+  useEffect(() => {
+    if (printers.length > 0 && window.electron?.printer?.connect) {
+      console.log('[Granja] Reconectando impresoras guardadas...')
+      printers.forEach((printer) => {
+        if (printer.serial_number && printer.ip && printer.access_code) {
+          console.log(`[Granja] Conectando a ${printer.name}...`)
+          window.electron.printer.connect({
+            id: printer.id,
+            ip: printer.ip,
+            access_code: printer.access_code,
+            serial_number: printer.serial_number,
+          }).catch((err) => {
+            console.error(`[Granja] Error reconectando ${printer.name}:`, err)
+          })
+        }
+      })
+    }
+  }, [printers])
 
   const counts = {
-    printing: printers.filter((p) => p.status === "printing").length,
-    idle: printers.filter((p) => p.status === "idle").length,
-    offline: printers.filter((p) => p.status === "offline").length,
+    printing: printers.filter((p) => {
+      const data = telemetry[p.id]
+      return data && (data.gcode_state === 'RUNNING' || data.gcode_state === 'PRINTING')
+    }).length,
+    idle: printers.filter((p) => {
+      const data = telemetry[p.id]
+      return data && (data.gcode_state === 'IDLE' || data.gcode_state === 'PAUSE')
+    }).length,
+    offline: printers.filter((p) => !telemetry[p.id]).length,
   }
 
   const handleDeleteConfirm = async () => {
@@ -99,10 +157,8 @@ function Granja() {
       if (result.success) {
         console.log(`[Granja] ✓ Impresora ${printerToDelete.id} eliminada exitosamente`)
         setPrinterToDelete(null)
-        // toast o notificación aquí si tienes
       } else {
         console.error("[Granja] Error al eliminar:", result.error)
-        // mostrar error al usuario
       }
     } catch (err) {
       console.error("[Granja] Error en handleDeleteConfirm:", err)
@@ -133,15 +189,6 @@ function Granja() {
         </div>
 
         <div className={styles.toolbarActions}>
-          <label className={styles.search}>
-            <BiSearch size={16} />
-            <input
-              type="search"
-              placeholder="Buscar impresora..."
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-            />
-          </label>
           <button type="button" className={styles.addBtn} onClick={() => setShowAddModal(true)}>
             <BiPlus size={18} /> Agregar impresora
           </button>
@@ -163,23 +210,19 @@ function Granja() {
         loading={deleting}
       />
 
-      {filtered.length === 0 ? (
+      {printers.length === 0 ? (
         <div className={styles.empty}>
           <BiPrinter size={28} />
-          <p>
-            {printers.length === 0
-              ? "No hay impresoras agregadas. Haz click en 'Agregar impresora' para comenzar."
-              : `No se encontraron impresoras con «${query}».`}
-          </p>
+          <p>No hay impresoras agregadas. Haz click en 'Agregar impresora' para comenzar.</p>
         </div>
       ) : (
         <div className={styles.grid}>
-          {filtered.map((printer) => (
+          {printers.map((printer) => (
             <PrinterCard 
               key={printer.id} 
               printer={printer}
+              telemetry={telemetry}
               onDelete={setPrinterToDelete}
-              getPrinterStatus={getPrinterStatus}
             />
           ))}
         </div>

@@ -2,15 +2,42 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const mqtt = require('mqtt');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
+const fetch = require('node-fetch');
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
+let activePrinters = new Map(); // Map de printer_id -> MQTT client
 
-// ===== CONFIGURACIÓN IMPRESORA =====
-const PRINTER_IP = '192.168.0.130';  
-const ACCESS_CODE = 'b43dd658';         
-const SERIAL_NUMBER = '22E8BJ662204133';      
-// =========================================
+// Variables de Supabase desde env
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'http://localhost:54321';
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+
+// Función para actualizar bridge status en BD
+async function updateBridgeStatusInDB(isConnected) {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/rest/v1/bridge_status?id=eq.1`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_ANON_KEY,
+        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
+      },
+      body: JSON.stringify({
+        is_connected: isConnected,
+        last_update: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      console.error(`[Bridge] Error actualizando BD: ${response.status}`);
+    } else {
+      console.log(`[Bridge] Estado actualizado en BD: ${isConnected ? 'Conectado' : 'Desconectado'}`);
+    }
+  } catch (err) {
+    console.error('[Bridge] Error:', err.message);
+  }
+}
 
 // Configurar electron-updater para GitHub Releases
 autoUpdater.allowDowngrade = false;
@@ -50,50 +77,96 @@ autoUpdater.on('update-downloaded', () => {
   }
 });
 
-// ===== CONEXIÓN MQTT A IMPRESORA =====
-const mqttUrl = `mqtts://${PRINTER_IP}:8883`;
-const client = mqtt.connect(mqttUrl, {
-  username: 'bblp',
-  password: ACCESS_CODE,
-  rejectUnauthorized: false,
-});
-
-client.on('connect', () => {
-  console.log('✅ Conectado a la impresora Bambu Lab por MQTT local');
-  client.subscribe(`device/${SERIAL_NUMBER}/report`);
-});
-
-client.on('message', (topic, message) => {
-  try {
-    const data = JSON.parse(message.toString());
-    
-    if (data.print) {
-      const telemetry = {
-        nozzle_temp: data.print.nozzle_temper ?? 0,
-        bed_temp: data.print.bed_temper ?? 0,
-        progress: data.print.mc_percent ?? 0,
-        gcode_state: data.print.gcode_state ?? 'IDLE',
-      };
-
-      console.log(' Telemetría:', `Nozzle: ${telemetry.nozzle_temp}°C | Bed: ${telemetry.bed_temp}°C | Estado: ${telemetry.gcode_state}`);
-
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('printer-status-update', telemetry);
-      }
-    }
-  } catch (err) {
-    console.error('❌ Error procesando mensaje MQTT:', err);
+// ===== FUNCIONES MQTT =====
+function connectToPrinter(printerId, ip, accessCode, serialNumber) {
+  if (activePrinters.has(printerId)) {
+    console.log(`[MQTT] Impresora ${printerId} ya conectada`);
+    return;
   }
-});
 
-client.on('error', (err) => {
-  console.error('❌ Error MQTT:', err.message);
-});
+  try {
+    const mqttUrl = `mqtts://${ip}:8883`;
+    const client = mqtt.connect(mqttUrl, {
+      username: 'bblp',
+      password: accessCode,
+      rejectUnauthorized: false,
+    });
+
+    client.on('connect', () => {
+      console.log(`[MQTT] ✅ Conectado a impresora ${printerId}`);
+      client.subscribe(`device/${serialNumber}/report`);
+      
+      // Actualizar BD cuando la primera impresora se conecta
+      if (activePrinters.size === 0) {
+        updateBridgeStatusInDB(true);
+      }
+    });
+
+    client.on('message', (topic, message) => {
+      try {
+        const data = JSON.parse(message.toString());
+        
+        if (data.print) {
+          const telemetry = {
+            printer_id: printerId,
+            nozzle_temp: data.print.nozzle_temper ?? 0,
+            bed_temp: data.print.bed_temper ?? 0,
+            progress: data.print.mc_percent ?? 0,
+            gcode_state: data.print.gcode_state ?? 'IDLE',
+          };
+
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('printer-status-update', telemetry);
+          }
+        }
+      } catch (err) {
+        console.error(`[MQTT] Error procesando mensaje: ${err.message}`);
+      }
+    });
+
+    client.on('error', (err) => {
+      console.error(`[MQTT] Error en ${printerId}: ${err.message}`);
+    });
+
+    client.on('close', () => {
+      console.log(`[MQTT] Desconectado de ${printerId}`);
+      activePrinters.delete(printerId);
+      
+      // Actualizar BD cuando la última impresora se desconecta
+      if (activePrinters.size === 0) {
+        updateBridgeStatusInDB(false);
+      }
+    });
+
+    activePrinters.set(printerId, client);
+  } catch (err) {
+    console.error(`[MQTT] Error al conectar ${printerId}: ${err.message}`);
+  }
+}
+
+function disconnectFromPrinter(printerId) {
+  const client = activePrinters.get(printerId);
+  if (client) {
+    client.end();
+    activePrinters.delete(printerId);
+    console.log(`[MQTT] Desconectado de impresora ${printerId}`);
+    
+    // Actualizar BD cuando se desconecta
+    if (activePrinters.size === 0) {
+      updateBridgeStatusInDB(false);
+    }
+  }
+}
 
 // ===== HANDLERS IPC =====
-ipcMain.on('printer-command', (event, command) => {
-  console.log('📤 Comando recibido desde la UI:', command);
-  // mensajes MQTT para enviar a la impresora
+ipcMain.handle('printer:connect', (event, printer) => {
+  connectToPrinter(printer.id, printer.ip, printer.access_code, printer.serial_number);
+  return { success: true };
+});
+
+ipcMain.handle('printer:disconnect', (event, printerId) => {
+  disconnectFromPrinter(printerId);
+  return { success: true };
 });
 
 ipcMain.handle('updater:get-version', async () => {
@@ -220,8 +293,15 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  // Desconectar todas las impresoras
+  activePrinters.forEach((client, printerId) => {
+    disconnectFromPrinter(printerId);
+  });
+  
+  // Marcar bridge como desconectado al cerrar app
+  updateBridgeStatusInDB(false);
+  
   if (process.platform !== 'darwin') {
-    client.end();
     app.quit();
   }
 });

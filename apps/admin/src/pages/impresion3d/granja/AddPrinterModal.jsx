@@ -5,8 +5,8 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
   const [name, setName] = useState("")
   const [ip, setIp] = useState("")
   const [accessCode, setAccessCode] = useState("")
+  const [serialNumber, setSerialNumber] = useState("")
   const [error, setError] = useState(null)
-  const [validating, setValidating] = useState(false)
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -30,70 +30,26 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
     }
 
     try {
-      setValidating(true)
-
       const printerIp = ip.trim()
       const printerAccessCode = accessCode.trim() || "00000000"
+      const printerSerialNumber = serialNumber.trim()
 
-      console.log("[AddPrinterModal] Validando impresora:", printerIp)
-
-      // Intentar validar via HTTP Bridge (Node.js service en localhost:8787)
-      try {
-        const bridgeResponse = await fetch("http://localhost:8787/printers/validate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            ip: printerIp,
-            name: name.trim(),
-            accessCode: printerAccessCode,
-          }),
-        })
-
-        const bridgeResult = await bridgeResponse.json()
-
-        if (!bridgeResponse.ok) {
-          console.warn("[AddPrinterModal] Bridge validation error:", bridgeResult.error)
-          setError(`No se pudo conectar a la impresora: ${bridgeResult.error}`)
-          return
-        }
-
-        console.log("[AddPrinterModal] Impresora validada via HTTP Bridge:", bridgeResult)
-      } catch (bridgeErr) {
-        // Si el bridge no está disponible, intentar validar via Electron MQTT (fallback)
-        console.warn("[AddPrinterModal] HTTP Bridge no disponible, intentando Electron MQTT...")
-
-        if (window.electron?.bridge?.validatePrinter) {
-          const result = await window.electron.bridge.validatePrinter(
-            name.trim(),
-            printerIp,
-            printerAccessCode
-          )
-
-          if (!result.success) {
-            setError(result.error || "Error al validar la impresora")
-            return
-          }
-
-          console.log("[AddPrinterModal] Impresora validada via Electron:", result)
-        } else {
-          console.warn("[AddPrinterModal] Ni HTTP Bridge ni Electron disponibles")
-          // En web, permitir agregar sin validar
-          if (!window.electron) {
-            console.log("[AddPrinterModal] En web, agregando sin validación")
-          } else {
-            setError("No se puede validar: bridge no disponible")
-            return
-          }
-        }
-      }
+      console.log("[AddPrinterModal] Agregando impresora:", printerIp)
 
       // Guardar en BD via onSubmit
-      const { success, error: submitError } = await onSubmit(name, printerIp, printerAccessCode)
+      // La conexión MQTT se hace automáticamente en Electron si tiene serial number
+      const { success, error: submitError } = await onSubmit(
+        name,
+        printerIp,
+        printerAccessCode,
+        printerSerialNumber
+      )
 
       if (success) {
         setName("")
         setIp("")
         setAccessCode("")
+        setSerialNumber("")
         setError(null)
         onClose()
       } else {
@@ -102,8 +58,6 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
     } catch (err) {
       console.error("[AddPrinterModal] Error:", err)
       setError(err.message || "Error inesperado")
-    } finally {
-      setValidating(false)
     }
   }
 
@@ -111,6 +65,7 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
     setName("")
     setIp("")
     setAccessCode("")
+    setSerialNumber("")
     setError(null)
     onClose()
   }
@@ -141,7 +96,6 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
               id="printer-name"
               type="text"
               className={styles.input}
-              placeholder="ej: A1 mini Nave 1"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={loading}
@@ -156,32 +110,38 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
               id="printer-ip"
               type="text"
               className={styles.input}
-              placeholder="ej: 192.168.1.100"
               value={ip}
               onChange={(e) => setIp(e.target.value)}
-              disabled={loading || validating}
+              disabled={loading}
             />
-            <p className={styles.hint}>
-              IP local en la red (ej: 192.168.1.100)
-            </p>
           </div>
 
           <div className={styles.field}>
             <label htmlFor="printer-access-code" className={styles.label}>
-              Código de Acceso MQTT (opcional)
+              Código de Acceso MQTT
             </label>
             <input
               id="printer-access-code"
               type="password"
               className={styles.input}
-              placeholder="ej: 0000 (si la impresora lo requiere)"
               value={accessCode}
               onChange={(e) => setAccessCode(e.target.value)}
               disabled={loading}
             />
-            <p className={styles.hint}>
-              Código de 4 dígitos de Bambu Lab si es requerido
-            </p>
+          </div>
+
+          <div className={styles.field}>
+            <label htmlFor="printer-serial" className={styles.label}>
+              Número de Serie
+            </label>
+            <input
+              id="printer-serial"
+              type="text"
+              className={styles.input}
+              value={serialNumber}
+              onChange={(e) => setSerialNumber(e.target.value)}
+              disabled={loading}
+            />
           </div>
 
           {error && <div className={styles.error}>{error}</div>}
@@ -198,9 +158,9 @@ export function AddPrinterModal({ isOpen, onClose, onSubmit, loading }) {
             <button
               type="submit"
               className={styles.submitBtn}
-              disabled={loading || validating}
+              disabled={loading}
             >
-              {validating ? "Conectando..." : loading ? "Guardando..." : "Agregar"}
+              {loading ? "Guardando..." : "Agregar"}
             </button>
           </div>
         </form>

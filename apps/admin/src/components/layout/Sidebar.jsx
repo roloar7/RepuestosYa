@@ -3,12 +3,14 @@ import { NavLink, useLocation } from "react-router-dom"
 import { navSections } from "../../navigation.js"
 import { icons } from "../iconMap.js"
 import { BiChevronDown } from "react-icons/bi"
+import { useBridgeStatus } from "../../hooks/useBridgeStatus.js"
 import logoSrc from "../../assets/Logo.svg"
 import styles from "./Sidebar.module.css"
 
 function Sidebar({ collapsed, drawerOpen }) {
   const location = useLocation()
   const [manuallyOpen, setManuallyOpen] = useState({})
+  const { bridgeConnected } = useBridgeStatus()
 
   const isParentOpen = (item) =>
     manuallyOpen[item.to] ?? location.pathname.startsWith(item.to)
@@ -127,11 +129,11 @@ function Sidebar({ collapsed, drawerOpen }) {
       </nav>
 
       <div className={styles.footer}>
-        <div className={styles.footerCard}>
+        <div className={`${styles.footerCard} ${bridgeConnected ? styles.connected : styles.disconnected}`}>
           <span className={styles.footerDot} />
           <span className={styles.footerText}>
-            <strong> Puente </strong>
-            <span> Desconectado </span>
+            <strong>Puente</strong>
+            <span>{bridgeConnected ? "Conectado" : "Desconectado"}</span>
           </span>
         </div>
       </div>

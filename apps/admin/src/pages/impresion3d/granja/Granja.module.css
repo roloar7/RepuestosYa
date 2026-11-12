@@ -48,33 +48,6 @@
   gap: 10px;
 }
 
-.search {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 14px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-text-muted);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-
-.search:focus-within {
-  border-color: var(--admin-color-primary);
-  box-shadow: var(--shadow-focus);
-}
-
-.search input {
-  border: 0;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  font-size: 14px;
-  color: var(--color-text);
-  width: 190px;
-}
-
 .addBtn {
   display: inline-flex;
   align-items: center;
@@ -203,6 +176,37 @@
 
 .cardBody {
   padding: 16px 18px;
+  flex: 1;
+}
+
+.telemetry {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
+
+.tempItem {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-alt);
+  text-align: center;
+}
+
+.tempLabel {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.tempValue {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
 }
 
 .jobLabel {
@@ -253,15 +257,13 @@
 }
 
 .idleText {
-  margin: 0 0 14px;
+  margin: 0;
   padding: 14px;
   border-radius: var(--radius-md);
   background: var(--color-bg-alt);
   font-size: 13px;
   color: var(--color-text-secondary);
 }
-
-
 
 .meta {
   display: grid;
@@ -384,20 +386,16 @@
     flex-wrap: wrap;
   }
 
-  .search {
-    flex: 1 1 100%;
-  }
-
-  .search input {
-    width: 100%;
-  }
-
   .addBtn {
     flex: 1 1 100%;
     justify-content: center;
   }
 
   .meta {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .telemetry {
     grid-template-columns: repeat(2, 1fr);
   }
 }
@@ -420,6 +418,8 @@
   .solidBtn {
     width: 100%;
   }
+
+  .telemetry {
+    grid-template-columns: 1fr;
+  }
 }
-
-

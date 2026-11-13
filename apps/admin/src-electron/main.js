@@ -8,13 +8,17 @@ const isDev = !app.isPackaged;
 let mainWindow = null;
 let activePrinters = new Map(); // Map de printer_id -> MQTT client
 
-// Variables de Supabase desde env
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || 'http://localhost:54321';
-const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9';
+// Variables de Supabase desde env (debe estar en .env.local o variables del sistema)
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = process.env.VITE_SUPABASE_ANON_KEY;
 
 // Función para actualizar bridge status en BD
 async function updateBridgeStatusInDB(isConnected) {
   try {
+    console.log(`[Bridge] Intentando actualizar BD a: ${isConnected ? 'Conectado ✅' : 'Desconectado ❌'}`);
+    console.log(`[Bridge] URL: ${SUPABASE_URL}/rest/v1/bridge_status?id=eq.1`);
+    console.log(`[Bridge] Impresoras activas: ${activePrinters.size}`);
+    
     const response = await fetch(`${SUPABASE_URL}/rest/v1/bridge_status?id=eq.1`, {
       method: 'PATCH',
       headers: {
@@ -29,10 +33,14 @@ async function updateBridgeStatusInDB(isConnected) {
       }),
     });
 
+    console.log(`[Bridge] Respuesta status: ${response.status}`);
+    const responseText = await response.text();
+    console.log(`[Bridge] Respuesta body: ${responseText}`);
+
     if (!response.ok) {
       console.error(`[Bridge] Error actualizando BD: ${response.status}`);
     } else {
-      console.log(`[Bridge] Estado actualizado en BD: ${isConnected ? 'Conectado' : 'Desconectado'}`);
+      console.log(`[Bridge] Estado actualizado exitosamente: ${isConnected ? 'Conectado ✅' : 'Desconectado ❌'}`);
     }
   } catch (err) {
     console.error('[Bridge] Error:', err.message);
@@ -93,13 +101,14 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
     });
 
     client.on('connect', () => {
-      console.log(`[MQTT] ✅ Conectado a impresora ${printerId}`);
+      console.log(`[MQTT] ✅ Impresora ${printerId} conectada exitosamente`);
       client.subscribe(`device/${serialNumber}/report`);
       
-      // Actualizar BD cuando la primera impresora se conecta
-      if (activePrinters.size === 0) {
-        updateBridgeStatusInDB(true);
-      }
+      // Agregar a lista de impresoras activas
+      activePrinters.set(printerId, client);
+      
+      // Actualizar BD cuando hay al menos una impresora conectada
+      updateBridgeStatusInDB(true);
     });
 
     client.on('message', (topic, message) => {
@@ -120,7 +129,7 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
           }
         }
       } catch (err) {
-        console.error(`[MQTT] Error procesando mensaje: ${err.message}`);
+        // Silenciar errores de parseo de telemetría
       }
     });
 
@@ -129,16 +138,14 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
     });
 
     client.on('close', () => {
-      console.log(`[MQTT] Desconectado de ${printerId}`);
       activePrinters.delete(printerId);
       
-      // Actualizar BD cuando la última impresora se desconecta
+      // Actualizar BD cuando no hay impresoras conectadas
       if (activePrinters.size === 0) {
         updateBridgeStatusInDB(false);
       }
     });
 
-    activePrinters.set(printerId, client);
   } catch (err) {
     console.error(`[MQTT] Error al conectar ${printerId}: ${err.message}`);
   }

@@ -19,8 +19,6 @@ export function useBridgeStatus() {
     // Escuchar telemetría de impresoras
     if (window.electron?.onPrinterStatus) {
       const unsubscribe = window.electron.onPrinterStatus((data) => {
-        console.log('[useBridgeStatus] Telemetría recibida, bridge conectado')
-        
         if (!cancelled) {
           setBridgeConnected(true)
         }
@@ -32,7 +30,6 @@ export function useBridgeStatus() {
         clearTimeout(updateTimeout)
         updateTimeout = setTimeout(() => {
           if (!cancelled) {
-            console.log('[useBridgeStatus] Sin telemetría por 5 segundos, marcando como desconectado')
             setBridgeConnected(false)
             updateBridgeStatusInDB(false)
           }
@@ -54,7 +51,6 @@ export function useBridgeStatus() {
 
   async function fetchInitialStatus() {
     try {
-      console.log('[useBridgeStatus] Cargando estado inicial desde BD...')
       const { data, error } = await supabase
         .from('bridge_status')
         .select('is_connected')
@@ -63,7 +59,6 @@ export function useBridgeStatus() {
       if (error) throw error
       
       const isConnected = data?.is_connected ?? false
-      console.log('[useBridgeStatus] Estado inicial cargado:', isConnected)
       setBridgeConnected(isConnected)
       setLoading(false)
     } catch (err) {
@@ -87,8 +82,6 @@ export function useBridgeStatus() {
 
       if (error) {
         console.error('[useBridgeStatus] Error actualizando BD:', error)
-      } else {
-        console.log('[useBridgeStatus] BD actualizada:', isConnected)
       }
     } catch (err) {
       console.error('[useBridgeStatus] Error:', err)

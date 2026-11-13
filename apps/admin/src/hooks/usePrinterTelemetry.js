@@ -14,8 +14,6 @@ export function usePrinterTelemetry() {
 
     // Escuchar actualizaciones de telemetría
     const unsubscribe = window.electron.onPrinterStatus((data) => {
-      console.log('[usePrinterTelemetry] Telemetría recibida:', data)
-      
       setTelemetry((prev) => ({
         ...prev,
         [data.printer_id]: {

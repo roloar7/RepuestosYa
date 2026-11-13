@@ -3,8 +3,8 @@ import styles from "./Impresion3DLayout.module.css"
 
 const tabs = [
   { to: "/impresion-3d/granja", label: "Granja" },
-  { to: "/impresion-3d/calculadora", label: "Calculadora" },
   { to: "/impresion-3d/archivos", label: "Archivos" },
+  { to: "/impresion-3d/calculadora", label: "Calculadora" },
   { to: "/impresion-3d/trabajos", label: "Trabajos", disabled: true },
   { to: "/impresion-3d/materiales", label: "Materiales", disabled: true },
 ]

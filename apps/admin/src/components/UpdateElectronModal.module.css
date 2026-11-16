@@ -149,6 +149,16 @@
   animation: pulse 1.5s ease-in-out infinite;
 }
 
+.readyText {
+  margin: var(--space-md, 12px) 0 0 0;
+  padding: var(--space-md, 12px);
+  font-size: 13px;
+  color: #10b981;
+  background: #f0fdf4;
+  border-left: 3px solid #10b981;
+  border-radius: 4px;
+}
+
 @keyframes pulse {
   0%,
   100% {

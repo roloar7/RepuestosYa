@@ -47,6 +47,12 @@ contextBridge.exposeInMainWorld('electron', {
       return () => ipcRenderer.removeListener('updater:download-error', listener);
     },
 
+    onReadyToInstall: (callback) => {
+      const listener = (_event, data) => callback(data);
+      ipcRenderer.on('updater:ready-to-install', listener);
+      return () => ipcRenderer.removeListener('updater:ready-to-install', listener);
+    },
+
     quitAndInstall: () => ipcRenderer.send('updater:quit-and-install'),
   },
 });

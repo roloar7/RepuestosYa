@@ -7,16 +7,29 @@ import styles from './UpdateElectronModal.module.css'
  */
 export default function UpdateElectronModal({ isOpen, onClose, newVersion, onInstall, isInstalling, downloadProgress }) {
   const [animating, setAnimating] = useState(false)
+  const [readyToInstall, setReadyToInstall] = useState(false)
 
   // Animación de apertura
   useEffect(() => {
     if (isOpen) {
       setAnimating(true)
+      setReadyToInstall(false)
     }
   }, [isOpen])
 
+  // Escuchar cuando esté listo para instalar
+  useEffect(() => {
+    if (!window.electron?.updater?.onReadyToInstall) return
+
+    const unsubscribe = window.electron.updater.onReadyToInstall(() => {
+      setReadyToInstall(true)
+    })
+
+    return () => unsubscribe?.()
+  }, [])
+
   const handleClose = () => {
-    if (!isInstalling) {
+    if (!isInstalling && !readyToInstall) {
       setAnimating(false)
       setTimeout(onClose, 300)
     }
@@ -24,6 +37,10 @@ export default function UpdateElectronModal({ isOpen, onClose, newVersion, onIns
 
   const handleInstall = async () => {
     await onInstall()
+  }
+
+  const handleRestart = () => {
+    window.electron?.updater?.quitAndInstall()
   }
 
   if (!isOpen) return null
@@ -47,7 +64,7 @@ export default function UpdateElectronModal({ isOpen, onClose, newVersion, onIns
             type="button"
             className={styles.closeBtn}
             onClick={handleClose}
-            disabled={isInstalling}
+            disabled={isInstalling || readyToInstall}
             aria-label="Cerrar"
           >
             ✕
@@ -83,26 +100,44 @@ export default function UpdateElectronModal({ isOpen, onClose, newVersion, onIns
               Descargando e instalando...
             </p>
           )}
+
+          {readyToInstall && (
+            <p className={styles.readyText}>
+              ✓ Actualización lista. Haz clic en "Reiniciar" para instalar.
+            </p>
+          )}
         </div>
 
         {/* Footer - Botones */}
         <div className={styles.footer}>
-          <button
-            type="button"
-            className={styles.cancelBtn}
-            onClick={handleClose}
-            disabled={isInstalling}
-          >
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className={styles.installBtn}
-            onClick={handleInstall}
-            disabled={isInstalling}
-          >
-            {isInstalling ? 'Instalando...' : 'Instalar'}
-          </button>
+          {!readyToInstall ? (
+            <>
+              <button
+                type="button"
+                className={styles.cancelBtn}
+                onClick={handleClose}
+                disabled={isInstalling}
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                className={styles.installBtn}
+                onClick={handleInstall}
+                disabled={isInstalling}
+              >
+                {isInstalling ? 'Instalando...' : 'Instalar'}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className={styles.installBtn}
+              onClick={handleRestart}
+            >
+              Reiniciar ahora
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -125,7 +125,7 @@ async function broadcastTelemetryToReact(printerId, nozzleTemp, bedTemp, progres
 // Configurar electron-updater para GitHub Releases
 autoUpdater.allowDowngrade = false;
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = true;
+autoUpdater.autoInstallOnAppQuit = false; // Instalamos manualmente con delay
 
 if (!isDev) {
   autoUpdater.setFeedURL({
@@ -411,16 +411,13 @@ ipcMain.handle('updater:download-and-install', async () => {
       autoUpdater.once('update-downloaded', () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('updater:download-progress', 100);
+          mainWindow.webContents.send('updater:ready-to-install', true);
         }
 
         resolve({
           success: true,
           message: 'Actualización lista para instalar',
         });
-
-        setTimeout(() => {
-          autoUpdater.quitAndInstall();
-        }, 1000);
       });
 
       autoUpdater.once('error', (error) => {
@@ -445,7 +442,26 @@ ipcMain.handle('updater:download-and-install', async () => {
 });
 
 ipcMain.on('updater:quit-and-install', () => {
-  autoUpdater.quitAndInstall();
+  try {
+    console.log('[Updater] Iniciando instalación...');
+    // Cerrar todos los listeners de MQTT antes de cerrar
+    activePrinters.forEach((client) => {
+      try {
+        client.end();
+      } catch (e) {
+        // ignore
+      }
+    });
+    activePrinters.clear();
+
+    // Esperar 1000ms para permitir que se cierren recursos y archivos
+    setTimeout(() => {
+      console.log('[Updater] Instalando actualización...');
+      autoUpdater.quitAndInstall(false, true); // force = false, diff = true
+    }, 1000);
+  } catch (error) {
+    console.error('[Updater] Error:', error.message);
+  }
 });
 
 // ===== VENTANA ELECTRON =====

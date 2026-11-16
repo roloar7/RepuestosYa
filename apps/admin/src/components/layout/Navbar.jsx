@@ -46,7 +46,7 @@ function Navbar({ onToggle, isCompact, drawerOpen }) {
 
       <label className={styles.search}>
         <BiSearch size={18} />
-        <input type="search" placeholder="Buscar repuestos, pedidos, impresoras..." />
+        <input type="search" placeholder="Buscar repuestos..." />
       </label>
 
       <button

@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useRef, useState, useEffect } from 'react'
 import { BiUpload, BiDownload, BiTrash, BiPrinter } from 'react-icons/bi'
 import { useAuthContext } from '../../../hooks/useAuthContext.js'
 import { usePrintFiles } from '../../../hooks/usePrintFiles.js'
 import { usePrinters } from '../../../hooks/usePrinters.js'
+import { usePrinterUpload } from '../../../hooks/usePrinterUpload.js'
 import { SendToPrintModal } from './SendToPrintModal.jsx'
 import styles from './Archivos.module.css'
 
@@ -10,12 +11,23 @@ function Archivos() {
   const { user } = useAuthContext()
   const { files, uploadFile, deleteFile, getFileUrl } = usePrintFiles(user?.id)
   const { printers } = usePrinters(user?.id)
+  const { uploadFile: uploadFileToPrinter, uploading: sendingToPrint, progress: uploadProgress, error: uploadError } = usePrinterUpload()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
   const [showPrintModal, setShowPrintModal] = useState(false)
   const [selectedFileToPrint, setSelectedFileToPrint] = useState(null)
-  const [sendingToPrint, setSendingToPrint] = useState(false)
   const fileInputRef = useRef(null)
+
+  // Escuchar progreso de carga FTPS
+  useEffect(() => {
+    if (!window.electron?.onUploadProgress) return
+
+    const unsubscribe = window.electron.onUploadProgress((data) => {
+      // El progreso se maneja en el hook usePrinterUpload
+    })
+
+    return () => unsubscribe?.()
+  }, [])
 
   const handleFileSelect = async (event) => {
     const selectedFiles = event.target.files
@@ -78,19 +90,12 @@ function Archivos() {
 
   const handleSendToPrint = async (fileId, printerId, filename) => {
     try {
-      setSendingToPrint(true)
-      console.log(`[Archivos] Enviando ${filename} a impresora ${printerId}`)
+      setError(null)
       
-      // Obtener URL del archivo
+      // Obtener archivo
       const file = files.find(f => f.id === fileId)
       if (!file) {
         setError('Archivo no encontrado')
-        return { success: false }
-      }
-
-      const url = await getFileUrl(file.storage_path)
-      if (!url) {
-        setError('No se pudo obtener el enlace del archivo')
         return { success: false }
       }
 
@@ -101,40 +106,29 @@ function Archivos() {
         return { success: false }
       }
 
-      // Enviar a Electron si está disponible
-      if (window.electron?.printer?.sendFile) {
-        try {
-          const result = await window.electron.printer.sendFile({
-            printer_id: printerId,
-            ip: printer.ip,
-            filename: filename,
-            fileUrl: url,
-          })
-          
-          if (!result.success) {
-            setError(result.error || 'Error al enviar a la impresora')
-            return { success: false }
-          }
-
-          console.log('[Archivos] Archivo enviado exitosamente')
-          return { success: true }
-        } catch (err) {
-          console.error('[Archivos] Error en Electron:', err)
-          setError('Error al comunicarse con la impresora: ' + err.message)
-          return { success: false }
-        }
-      } else {
-        // En web, solo mostrar el enlace
-        console.log('[Archivos] En web, URL para descargar:', url)
-        setError('Función de impresión remota no disponible en web')
+      // Obtener URL del archivo
+      const url = await getFileUrl(file.storage_path)
+      if (!url) {
+        setError('No se pudo obtener el enlace del archivo')
         return { success: false }
       }
+
+      console.log(`[Archivos] Enviando ${filename} a ${printer.name}`)
+      
+      // Usar FTP para subir
+      const result = await uploadFileToPrinter(url, filename, printer)
+      
+      if (!result.success) {
+        setError(result.error || 'Error al enviar a la impresora')
+        return { success: false }
+      }
+
+      console.log('[Archivos] ✅ Archivo enviado exitosamente')
+      return { success: true }
     } catch (err) {
       console.error('[Archivos] Error:', err)
       setError('Error al enviar a imprimir')
       return { success: false }
-    } finally {
-      setSendingToPrint(false)
     }
   }
 
@@ -289,6 +283,7 @@ function Archivos() {
         printers={printers}
         onSendToPrint={handleSendToPrint}
         loading={sendingToPrint}
+        progress={uploadProgress}
       />
     </div>
   )

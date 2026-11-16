@@ -2,7 +2,7 @@ import { useState, useEffect } from "react"
 import { BiPlay, BiPlus, BiPrinter, BiTrash } from "react-icons/bi"
 import { useAuthContext } from "../../../hooks/useAuthContext.js"
 import { usePrinters } from "../../../hooks/usePrinters.js"
-import { usePrinterTelemetry } from "../../../hooks/usePrinterTelemetry.js"
+import { usePrinterRealtimeTelemetry } from "../../../hooks/usePrinterRealtimeTelemetry.js"
 import { AddPrinterModal } from "./AddPrinterModal.jsx"
 import { DeletePrinterModal } from "./DeletePrinterModal.jsx"
 
@@ -108,7 +108,7 @@ function PrinterCard({ printer, telemetry, onDelete }) {
 function Granja() {
   const { user } = useAuthContext()
   const { printers, loading: printersLoading, addPrinter, deletePrinter } = usePrinters(user?.id)
-  const telemetry = usePrinterTelemetry()
+  const telemetry = usePrinterRealtimeTelemetry(printers.map(p => p.id))
   const [showAddModal, setShowAddModal] = useState(false)
   const [printerToDelete, setPrinterToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)

@@ -9,8 +9,11 @@ import Granja from "./pages/impresion3d/granja/Granja.jsx"
 import Calculadora from "./pages/impresion3d/calculadora/Calculadora.jsx"
 import Archivos from "./pages/impresion3d/archivos/Archivos.jsx"
 import { Navigate, Route, Routes } from "react-router-dom"
+import { useElectronInit } from "./hooks/useElectronInit.js"
 
 function App() {
+  useElectronInit()
+  
   return (
     <AuthProvider>
       <Routes>

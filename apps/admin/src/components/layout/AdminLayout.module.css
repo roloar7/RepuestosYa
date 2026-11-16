@@ -19,7 +19,6 @@
   flex: 1;
   min-width: 0;
   padding: 28px 32px 48px;
-  max-height: calc(100vh - 66px);
   overflow-y: auto;
 }
 
@@ -41,7 +40,6 @@
 
   .content {
     padding: 22px 20px 40px;
-    max-height: calc(100vh - 66px);
     overflow-y: auto;
   }
 }
@@ -49,7 +47,6 @@
 @media (max-width: 480px) {
   .content {
     padding: 16px 14px 32px;
-    max-height: calc(100vh - 66px);
     overflow-y: auto;
   }
 }

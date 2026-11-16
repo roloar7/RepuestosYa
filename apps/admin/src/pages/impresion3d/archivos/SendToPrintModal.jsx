@@ -2,7 +2,7 @@ import { useState } from "react"
 import { BiCheck } from "react-icons/bi"
 import styles from "./SendToPrintModal.module.css"
 
-export function SendToPrintModal({ isOpen, onClose, file, printers, onSendToPrint, loading }) {
+export function SendToPrintModal({ isOpen, onClose, file, printers, onSendToPrint, loading, progress = 0 }) {
   const [selectedPrinterId, setSelectedPrinterId] = useState(null)
 
   const handlePrinterToggle = (printerId) => {
@@ -77,6 +77,15 @@ export function SendToPrintModal({ isOpen, onClose, file, printers, onSendToPrin
               </div>
             )}
           </div>
+
+          {loading && (
+            <div className={styles.progressContainer}>
+              <div className={styles.progressBar}>
+                <div className={styles.progressFill} style={{ width: `${progress}%` }} />
+              </div>
+              <p className={styles.progressText}>{progress}%</p>
+            </div>
+          )}
         </div>
 
         <footer className={styles.footer}>

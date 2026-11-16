@@ -5,16 +5,28 @@ const { contextBridge, ipcRenderer } = require('electron');
  * El renderer accede via window.electron.*
  */
 contextBridge.exposeInMainWorld('electron', {
+  // --- App Init ---
+  app: {
+    initSupabase: (config) => ipcRenderer.invoke('app:init-supabase', config),
+  },
+
   // --- Impresoras ---
   printer: {
     connect: (printer) => ipcRenderer.invoke('printer:connect', printer),
     disconnect: (printerId) => ipcRenderer.invoke('printer:disconnect', printerId),
+    uploadFile: (payload) => ipcRenderer.invoke('printer:upload-file', payload),
   },
 
   onPrinterStatus: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('printer-status-update', listener);
     return () => ipcRenderer.removeListener('printer-status-update', listener);
+  },
+
+  onUploadProgress: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('printer:upload-progress', listener);
+    return () => ipcRenderer.removeListener('printer:upload-progress', listener);
   },
 
   // --- Sistema de Actualizaciones (Updater) ---

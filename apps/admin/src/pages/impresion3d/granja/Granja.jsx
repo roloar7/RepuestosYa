@@ -140,9 +140,10 @@ function Granja() {
     }).length,
     idle: printers.filter((p) => {
       const data = telemetry[p.id]
-      return data && (data.gcode_state === 'IDLE' || data.gcode_state === 'PAUSE')
+      // Si tiene telemetría y está idle/paused, o si está conectada pero sin telemetría aún
+      return (data && (data.gcode_state === 'IDLE' || data.gcode_state === 'PAUSE')) || (p.status !== 'offline' && !data)
     }).length,
-    offline: printers.filter((p) => !telemetry[p.id]).length,
+    offline: printers.filter((p) => p.status === 'offline').length,
   }
 
   const handleDeleteConfirm = async () => {

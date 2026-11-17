@@ -43,11 +43,9 @@ async function updateBridgeStatusInDB(isConnected) {
 async function updatePrinterStatusInDB(printerId, status, gcodeState) {
   try {
     const url = `${SUPABASE_URL}/rest/v1/printers?id=eq.${printerId}`;
-    const isConnected = status !== 'offline';
     
     const body = JSON.stringify({
       status: status,
-      is_connected: isConnected,
       last_seen_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     });
@@ -187,6 +185,15 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
       
       // Marcar impresora como conectada
       updatePrinterStatusInDB(printerId, 'idle', 'IDLE');
+      
+      // Notificar a React sobre el cambio de conexión
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('printer-connection-status', {
+          printer_id: printerId,
+          is_connected: true,
+          status: 'idle',
+        });
+      }
     });
 
     client.on('message', (topic, message) => {
@@ -204,9 +211,9 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
             printerStatus = 'paused';
           }
           
-          // Extraer datos de telemetría
-          const nozzleTemp = data.print.nozzle_temper ?? 0;
-          const bedTemp = data.print.bed_temper ?? 0;
+          // Extraer datos de telemetría (redondeados)
+          const nozzleTemp = Math.round(data.print.nozzle_temper ?? 0); // Convierte 220.03125 en 220
+          const bedTemp = Math.round(data.print.bed_temper ?? 0);       // Convierte 65.03125 en 65
           const progress = data.print.mc_percent ?? 0;
           
           // Actualizar estado en BD
@@ -243,6 +250,15 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
       
       // Marcar impresora como offline
       updatePrinterStatusInDB(printerId, 'offline', 'OFFLINE');
+      
+      // Notificar a React sobre el cambio de desconexión
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('printer-connection-status', {
+          printer_id: printerId,
+          is_connected: false,
+          status: 'offline',
+        });
+      }
       
       // Actualizar BD cuando no hay impresoras conectadas
       if (activePrinters.size === 0) {

@@ -176,6 +176,79 @@
   color: var(--color-text-muted);
 }
 
+/* Estado: Libre (idle) */
+.printerOption.status-idle:hover {
+  border-color: #10b981;
+  background: #f0fdf4;
+}
+
+.printerOption.status-idle.selected {
+  border-color: #10b981;
+  background: #dcfce7;
+}
+
+.printerStatus.status-idle {
+  color: #10b981;
+  font-weight: 600;
+}
+
+/* Estado: Imprimiendo (printing) */
+.printerOption.status-printing {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.printerOption.status-printing:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.printerStatus.status-printing {
+  color: #f59e0b;
+  font-weight: 600;
+}
+
+/* Estado: En pausa (paused) */
+.printerOption.status-paused:hover {
+  border-color: #3b82f6;
+  background: #eff6ff;
+}
+
+.printerOption.status-paused.selected {
+  border-color: #3b82f6;
+  background: #dbeafe;
+}
+
+.printerStatus.status-paused {
+  color: #3b82f6;
+  font-weight: 600;
+}
+
+/* Estado: Desconectada (offline) */
+.printerOption.status-offline {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.printerOption.status-offline:hover {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+}
+
+.printerStatus.status-offline {
+  color: #6b7280;
+  font-weight: 600;
+}
+
+/* Deshabilitado */
+.printerOption.disabled {
+  cursor: not-allowed;
+}
+
+.printerOption.disabled .printerCheck {
+  background: var(--color-border);
+}
+
 .noPrinters {
   padding: 20px;
   border-radius: var(--radius-md, 8px);

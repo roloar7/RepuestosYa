@@ -3,6 +3,7 @@ import { BiUpload, BiDownload, BiTrash, BiPrinter } from 'react-icons/bi'
 import { useAuthContext } from '../../../hooks/useAuthContext.js'
 import { usePrintFiles } from '../../../hooks/usePrintFiles.js'
 import { usePrinters } from '../../../hooks/usePrinters.js'
+import { usePrinterRealtimeTelemetry } from '../../../hooks/usePrinterRealtimeTelemetry.js'
 import { usePrinterUpload } from '../../../hooks/usePrinterUpload.js'
 import { SendToPrintModal } from './SendToPrintModal.jsx'
 import styles from './Archivos.module.css'
@@ -11,6 +12,7 @@ function Archivos() {
   const { user } = useAuthContext()
   const { files, uploadFile, deleteFile, getFileUrl } = usePrintFiles(user?.id)
   const { printers } = usePrinters(user?.id)
+  const telemetry = usePrinterRealtimeTelemetry(printers.map(p => p.id))
   const { uploadFile: uploadFileToPrinter, uploading: sendingToPrint, progress: uploadProgress, error: uploadError } = usePrinterUpload()
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState(null)
@@ -281,6 +283,7 @@ function Archivos() {
         }}
         file={selectedFileToPrint}
         printers={printers}
+        telemetry={telemetry}
         onSendToPrint={handleSendToPrint}
         loading={sendingToPrint}
         progress={uploadProgress}

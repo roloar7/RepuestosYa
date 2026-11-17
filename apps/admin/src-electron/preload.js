@@ -23,6 +23,12 @@ contextBridge.exposeInMainWorld('electron', {
     return () => ipcRenderer.removeListener('printer-status-update', listener);
   },
 
+  onPrinterConnectionStatus: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('printer-connection-status', listener);
+    return () => ipcRenderer.removeListener('printer-connection-status', listener);
+  },
+
   onUploadProgress: (callback) => {
     const listener = (_event, data) => callback(data);
     ipcRenderer.on('printer:upload-progress', listener);

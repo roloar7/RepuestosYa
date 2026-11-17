@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { supabase } from "@repuestos-ya/supabase"
 
 /**
@@ -47,25 +47,77 @@ export function usePrinters(userId) {
       .on(
         "postgres_changes",
         {
-          event: "*",
+          event: "UPDATE",
           schema: "public",
           table: "printers",
         },
-        (_payload) => {
-          console.log("[Realtime] Printer update")
+        (payload) => {
+          console.log("[Realtime] Printer UPDATE:", payload.new)
           if (!cancelled) {
-            // Refetch printers cuando hay cambios
+            // Actualizar directamente en lugar de refetch
+            setPrinters((prev) =>
+              prev.map((p) => (p.id === payload.new.id ? payload.new : p))
+            )
+          }
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "printers",
+        },
+        (payload) => {
+          console.log("[Realtime] Printer INSERT:", payload.new)
+          if (!cancelled) {
             fetchPrinters()
           }
         }
       )
-      .subscribe()
+      .on(
+        "postgres_changes",
+        {
+          event: "DELETE",
+          schema: "public",
+          table: "printers",
+        },
+        (payload) => {
+          console.log("[Realtime] Printer DELETE:", payload.old.id)
+          if (!cancelled) {
+            setPrinters((prev) => prev.filter((p) => p.id !== payload.old.id))
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log("[Realtime] Channel status:", status)
+      })
 
     return () => {
       cancelled = true
       channel.unsubscribe()
     }
   }, [userId])
+
+  // Escuchar cambios de conexión desde Electron (IPC)
+  useEffect(() => {
+    if (!window.electron?.onPrinterConnectionStatus) return
+
+    const unsubscribe = window.electron.onPrinterConnectionStatus((data) => {
+      console.log('[usePrinters] Cambio de estado IPC:', data)
+      if (!window.__cancelledPrinters) {
+        setPrinters((prev) =>
+          prev.map((p) => 
+            p.id === data.printer_id 
+              ? { ...p, status: data.status }
+              : p
+          )
+        )
+      }
+    })
+
+    return () => unsubscribe?.()
+  }, [])
 
   /**
    * Agregar impresora a la BD y conectar MQTT en Electron

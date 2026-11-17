@@ -46,8 +46,8 @@ export function SendToPrintModal({ isOpen, onClose, file, printers, telemetry, o
     const telemetryData = telemetry?.[printer.id]
     
     if (!telemetryData) {
-      // Conectada pero sin telemetría aún
-      return { label: "Esperando...", color: "idle", canSelect: true }
+      // Conectada pero sin telemetría aún = se está intentando conectar
+      return { label: "Desconectada", color: "offline", canSelect: false }
     }
 
     // Verificar estado de impresión desde telemetría

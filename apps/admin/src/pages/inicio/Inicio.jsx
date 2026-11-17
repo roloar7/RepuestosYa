@@ -2,6 +2,8 @@ import { Link } from "react-router-dom"
 import { BiPulse, BiPackage, BiClipboard, BiTime, BiLayer } from "react-icons/bi"
 import { useAuthContext } from "../../hooks/useAuthContext.js"
 import { useProfile } from "../../hooks/useProfile.js"
+import { usePrinters } from "../../hooks/usePrinters.js"
+import { usePrinterAutoConnect } from "../../hooks/usePrinterAutoConnect.js"
 import styles from "./Inicio.module.css"
 
 const stats = [
@@ -49,6 +51,10 @@ const activity = [
 function Inicio() {
   const { user } = useAuthContext()
   const { profile } = useProfile(user?.id)
+  const { printers } = usePrinters(user?.id)
+  
+  // Conectar impresoras globalmente al arrancar la app (solo una vez)
+  usePrinterAutoConnect(printers)
 
   const username = profile?.username || ""
 

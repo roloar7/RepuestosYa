@@ -160,20 +160,48 @@ autoUpdater.on('update-downloaded', () => {
 
 // ===== FUNCIONES MQTT =====
 function connectToPrinter(printerId, ip, accessCode, serialNumber) {
+  console.log(`[MQTT] Iniciando conexión a ${printerId} (${ip}:8883)...`);
+  
   if (activePrinters.has(printerId)) {
     console.log(`[MQTT] Impresora ${printerId} ya conectada`);
     return;
   }
 
+  // Marcar como offline inmediatamente (intentando conectar)
+  updatePrinterStatusInDB(printerId, 'offline', 'CONNECTING');
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('printer-connection-status', {
+      printer_id: printerId,
+      is_connected: false,
+      status: 'offline',
+    });
+  }
+
   try {
     const mqttUrl = `mqtts://${ip}:8883`;
+    console.log(`[MQTT] URL: ${mqttUrl}, usuario: bblp`);
+    
     const client = mqtt.connect(mqttUrl, {
       username: 'bblp',
       password: accessCode,
       rejectUnauthorized: false,
+      reconnectPeriod: 0,  // Desabilitar reintento automático
+      connectTimeout: 10000, // 10 segundos timeout
     });
 
+    // Timeout para conexión (10 segundos)
+    let connectionTimeout = setTimeout(() => {
+      if (!activePrinters.has(printerId)) {
+        console.error(`[MQTT] ⏱️ Timeout conectando a ${printerId}, cerrando...`);
+        client.end(true, () => {
+          console.log(`[MQTT] Conexión cerrada por timeout para ${printerId}`);
+        });
+        updatePrinterStatusInDB(printerId, 'offline', 'TIMEOUT');
+      }
+    }, 10000);
+
     client.on('connect', () => {
+      clearTimeout(connectionTimeout); // Limpiar timeout cuando conecta
       console.log(`[MQTT] ✅ Impresora ${printerId} conectada exitosamente`);
       client.subscribe(`device/${serialNumber}/report`);
       
@@ -241,8 +269,14 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
 
     client.on('error', (err) => {
       console.error(`[MQTT] Error en ${printerId}: ${err.message}`);
-      // Marcar como error si hay problema de conexión
-      updatePrinterStatusInDB(printerId, 'error', 'ERROR');
+      // Marcar como error/offline si hay problema de conexión
+      const status = err.message.includes('Timeout') ? 'offline' : 'error';
+      updatePrinterStatusInDB(printerId, status, 'ERROR');
+      
+      // Cerrar la conexión para evitar reintentatos
+      client.end(true, () => {
+        console.log(`[MQTT] Conexión cerrada para ${printerId}`);
+      });
     });
 
     client.on('close', () => {
@@ -299,6 +333,8 @@ ipcMain.handle('app:init-supabase', (event, { supabaseUrl, supabaseKey }) => {
 });
 
 ipcMain.handle('printer:connect', (event, printer) => {
+  console.log(`[IPC] Recibido printer:connect para ${printer.id}`);
+  console.log(`[IPC] Detalles: ${printer.ip}:${printer.access_code}:${printer.serial_number}`);
   connectToPrinter(printer.id, printer.ip, printer.access_code, printer.serial_number);
   return { success: true };
 });

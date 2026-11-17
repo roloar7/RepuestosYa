@@ -113,25 +113,8 @@ function Granja() {
   const [printerToDelete, setPrinterToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Reconectar impresoras al cargar la página
-  useEffect(() => {
-    if (printers.length > 0 && window.electron?.printer?.connect) {
-      console.log('[Granja] Reconectando impresoras guardadas...')
-      printers.forEach((printer) => {
-        if (printer.serial_number && printer.ip && printer.access_code) {
-          console.log(`[Granja] Conectando a ${printer.name}...`)
-          window.electron.printer.connect({
-            id: printer.id,
-            ip: printer.ip,
-            access_code: printer.access_code,
-            serial_number: printer.serial_number,
-          }).catch((err) => {
-            console.error(`[Granja] Error reconectando ${printer.name}:`, err)
-          })
-        }
-      })
-    }
-  }, [printers])
+  // Nota: Las impresoras se conectan globalmente en Inicio.jsx al arrancar la app
+  // No se reconectan en cada navegación para evitar múltiples conexiones
 
   const counts = {
     printing: printers.filter((p) => {

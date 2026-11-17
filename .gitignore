@@ -14,7 +14,6 @@ dist-build
 out
 *.local
 .env
-*.md
 
 # Electron build artifacts
 *.asar

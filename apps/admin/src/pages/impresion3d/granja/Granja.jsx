@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react"
-import { BiPlay, BiPlus, BiPrinter, BiTrash } from "react-icons/bi"
+import { BiPlay, BiPlus, BiPrinter, BiTrash, BiPause, BiStopCircle } from "react-icons/bi"
 import { useAuthContext } from "../../../hooks/useAuthContext.js"
 import { usePrinters } from "../../../hooks/usePrinters.js"
 import { usePrinterRealtimeTelemetry } from "../../../hooks/usePrinterRealtimeTelemetry.js"
@@ -41,8 +41,38 @@ function StatusBadge({ printer, telemetry }) {
   )
 }
 
-function PrinterCard({ printer, telemetry, onDelete }) {
+function PrinterCard({ printer, telemetry, onDelete, onPause, onResume, onStop }) {
   const data = telemetry[printer.id]
+  const isPrinting = data && (data.gcode_state === 'RUNNING' || data.gcode_state === 'PRINTING')
+  const isPaused = data && data.gcode_state === 'PAUSE'
+  const [commandLoading, setCommandLoading] = useState(null)
+  
+  const handlePause = async () => {
+    setCommandLoading('pause')
+    try {
+      await onPause(printer.id)
+    } finally {
+      setCommandLoading(null)
+    }
+  }
+  
+  const handleResume = async () => {
+    setCommandLoading('resume')
+    try {
+      await onResume(printer.id)
+    } finally {
+      setCommandLoading(null)
+    }
+  }
+  
+  const handleStop = async () => {
+    setCommandLoading('stop')
+    try {
+      await onStop(printer.id)
+    } finally {
+      setCommandLoading(null)
+    }
+  }
   
   return (
     <article className={styles.card}>
@@ -93,13 +123,52 @@ function PrinterCard({ printer, telemetry, onDelete }) {
         >
           <BiTrash size={16} /> Eliminar
         </button>
-        <button
-          type="button"
-          className={styles.solidBtn}
-          disabled={!data || data.gcode_state === 'IDLE'}
-        >
-          <BiPlay size={16} /> Imprimir
-        </button>
+        
+        {isPrinting && (
+          <>
+            <button
+              type="button"
+              className={styles.warningBtn}
+              onClick={handlePause}
+              disabled={commandLoading === 'pause'}
+              title="Pausar impresión"
+            >
+              <BiPause size={16} /> Pausar
+            </button>
+            <button
+              type="button"
+              className={styles.dangerBtn}
+              onClick={handleStop}
+              disabled={commandLoading === 'stop'}
+              title="Detener impresión"
+            >
+              <BiStopCircle size={16} /> Detener
+            </button>
+          </>
+        )}
+        
+        {isPaused && (
+          <button
+            type="button"
+            className={styles.successBtn}
+            onClick={handleResume}
+            disabled={commandLoading === 'resume'}
+            title="Reanudar impresión"
+          >
+            <BiPlay size={16} /> Reanudar
+          </button>
+        )}
+        
+        {!isPrinting && !isPaused && (
+          <button
+            type="button"
+            className={styles.solidBtn}
+            disabled={!data || data.gcode_state === 'IDLE'}
+            title="Imprimir"
+          >
+            <BiPlay size={16} /> Imprimir
+          </button>
+        )}
       </footer>
     </article>
   )
@@ -148,6 +217,48 @@ function Granja() {
       console.error("[Granja] Error en handleDeleteConfirm:", err)
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handlePause = async (printerId) => {
+    try {
+      console.log(`[Granja] Pausando impresora ${printerId}...`)
+      const result = await window.electron?.ipcRenderer?.invoke('printer:pause', printerId)
+      if (result?.success) {
+        console.log(`[Granja] ✓ Impresora pausada`)
+      } else {
+        console.error("[Granja] Error al pausar:", result?.error)
+      }
+    } catch (err) {
+      console.error("[Granja] Error en handlePause:", err)
+    }
+  }
+
+  const handleResume = async (printerId) => {
+    try {
+      console.log(`[Granja] Reanudando impresora ${printerId}...`)
+      const result = await window.electron?.ipcRenderer?.invoke('printer:resume', printerId)
+      if (result?.success) {
+        console.log(`[Granja] ✓ Impresora reanudada`)
+      } else {
+        console.error("[Granja] Error al reanudar:", result?.error)
+      }
+    } catch (err) {
+      console.error("[Granja] Error en handleResume:", err)
+    }
+  }
+
+  const handleStop = async (printerId) => {
+    try {
+      console.log(`[Granja] Deteniendo impresora ${printerId}...`)
+      const result = await window.electron?.ipcRenderer?.invoke('printer:stop', printerId)
+      if (result?.success) {
+        console.log(`[Granja] ✓ Impresora detenida`)
+      } else {
+        console.error("[Granja] Error al detener:", result?.error)
+      }
+    } catch (err) {
+      console.error("[Granja] Error en handleStop:", err)
     }
   }
 
@@ -207,6 +318,9 @@ function Granja() {
               printer={printer}
               telemetry={telemetry}
               onDelete={setPrinterToDelete}
+              onPause={handlePause}
+              onResume={handleResume}
+              onStop={handleStop}
             />
           ))}
         </div>

@@ -15,19 +15,27 @@ CREATE TABLE IF NOT EXISTS printers (
   access_code VARCHAR(255),
   serial_number VARCHAR(255) UNIQUE,
   
+  -- Multi-protocol support
+  protocol VARCHAR(50) DEFAULT 'bambu_lan',
+  credentials JSONB DEFAULT '{}'::jsonb,
+  agent_location VARCHAR(100),
+  
   status VARCHAR(20) DEFAULT 'offline', -- idle, printing, paused, offline, error
   last_seen_at TIMESTAMP WITH TIME ZONE,
   
   created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
   
-  CONSTRAINT valid_status CHECK (status IN ('idle', 'printing', 'paused', 'offline', 'error'))
+  CONSTRAINT valid_status CHECK (status IN ('idle', 'printing', 'paused', 'offline', 'error')),
+  CONSTRAINT valid_protocol CHECK (protocol IN ('bambu_lan', 'klipper_moonraker'))
 );
 
 CREATE INDEX idx_printers_user_id ON printers(user_id);
 CREATE INDEX idx_printers_ip ON printers(ip);
 CREATE INDEX idx_printers_serial ON printers(serial_number);
 CREATE INDEX idx_printers_status ON printers(status);
+CREATE INDEX idx_printers_protocol ON printers(protocol);
+CREATE INDEX idx_printers_agent_location ON printers(agent_location);
 
 -- RLS para printers
 ALTER TABLE printers ENABLE ROW LEVEL SECURITY;

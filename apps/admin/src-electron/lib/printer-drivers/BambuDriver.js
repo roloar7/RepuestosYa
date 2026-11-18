@@ -5,6 +5,7 @@
 const mqtt = require('mqtt');
 const { Client: FTPClient } = require('basic-ftp');
 const BasePrinterDriver = require('./BasePrinterDriver');
+const {\n  MQTT_CONFIG,\n  POLLING_CONFIG,\n  FTPS_CONFIG,\n  GCODE_STATES,\n  PRINTER_STATUS,\n} = require('../utils/constants');
 
 class BambuDriver extends BasePrinterDriver {
   constructor(printerConfig) {
@@ -28,13 +29,12 @@ class BambuDriver extends BasePrinterDriver {
         this.mqttClient = mqtt.connect(mqttUrl, {
           username: 'bblp',
           password: this.credentials.access_code || '00000000',
-          protocolVersion: 4, // MQTT 3.1.1 (como Bambu Studio)
-          clean: true, // Evita saturar la memoria del broker embebido
-          keepalive: 10, // PING MQTT cada 10 segundos
-          reconnectPeriod: 2000, // Reconexión rápida si el Wi-Fi parpadea
-          connectTimeout: 10000, // 10 segundos timeout
-          rejectUnauthorized: false, // Certificado autofirmado
-        });
+          protocolVersion: MQTT_CONFIG.PROTOCOL_VERSION,
+          clean: MQTT_CONFIG.CLEAN_SESSION,
+          keepalive: MQTT_CONFIG.KEEPALIVE,
+          reconnectPeriod: MQTT_CONFIG.RECONNECT_PERIOD,
+          connectTimeout: MQTT_CONFIG.CONNECT_TIMEOUT,
+          rejectUnauthorized: false, // Certificado autofirmado\n        });
 
         // Timeout para conexión inicial
         let connectionTimeout = setTimeout(() => {
@@ -43,7 +43,7 @@ class BambuDriver extends BasePrinterDriver {
             this.mqttClient?.end(true);
             reject(new Error('Connection timeout'));
           }
-        }, 10000);
+        }, MQTT_CONFIG.CONNECT_TIMEOUT);
 
         this.mqttClient.on('connect', () => {
           clearTimeout(connectionTimeout);
@@ -63,13 +63,13 @@ class BambuDriver extends BasePrinterDriver {
                 JSON.stringify({
                   pushing: {
                     sequence_id: Date.now().toString(),
-                    command: 'pushall',
+                    command: POLLING_CONFIG.COMMAND,
                   },
                 }),
                 { qos: 0 }
               );
             }
-          }, 3000);
+          }, POLLING_CONFIG.INTERVAL);
 
           this.emit('connect');
           resolve({ success: true });

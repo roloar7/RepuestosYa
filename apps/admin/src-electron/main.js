@@ -9,6 +9,7 @@ const { Client: FTPClient } = require('basic-ftp');
 const isDev = !app.isPackaged;
 let mainWindow = null;
 let activePrinters = new Map(); // Map de printer_id -> MQTT client
+let pollingIntervals = new Map(); // Map de printer_id -> polling interval
 
 // Variables de Supabase - obtenidas del mainWindow después de cargar
 let SUPABASE_URL = null;
@@ -184,9 +185,12 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
     const client = mqtt.connect(mqttUrl, {
       username: 'bblp',
       password: accessCode,
+      protocolVersion: 4,       // Forzar MQTT 3.1.1 (como Bambu Studio)
+      clean: true,              // Evita saturar la memoria del broker embebido
+      keepalive: 10,            // PING MQTT cada 10 segundos
+      reconnectPeriod: 2000,    // Reconexión rápida si el Wi-Fi parpadea
+      connectTimeout: 10000,    // 10 segundos timeout para conexión inicial
       rejectUnauthorized: false,
-      reconnectPeriod: 0,  // Desabilitar reintento automático
-      connectTimeout: 10000, // 10 segundos timeout
     });
 
     // Timeout para conexión (10 segundos)
@@ -203,7 +207,7 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
     client.on('connect', () => {
       clearTimeout(connectionTimeout); // Limpiar timeout cuando conecta
       console.log(`[MQTT] ✅ Impresora ${printerId} conectada exitosamente`);
-      client.subscribe(`device/${serialNumber}/report`);
+      client.subscribe(`device/${serialNumber}/report`, { qos: 0 });
       
       // Agregar a lista de impresoras activas
       activePrinters.set(printerId, client);
@@ -222,6 +226,30 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
           status: 'idle',
         });
       }
+
+      // 🔄 Polling activo: obtener estado cada 3 segundos (como Bambu Studio)
+      // Esto mantiene el Wi-Fi de la A1 despierto y obtiene datos más estables
+      if (pollingIntervals.has(printerId)) {
+        clearInterval(pollingIntervals.get(printerId));
+      }
+
+      const pollingInterval = setInterval(() => {
+        if (client.connected) {
+          console.log(`[MQTT] Polling ${printerId}: enviando pushall...`);
+          client.publish(
+            `device/${serialNumber}/request`,
+            JSON.stringify({
+              pushing: { 
+                sequence_id: Date.now().toString(), 
+                command: 'pushall' 
+              }
+            }),
+            { qos: 0 }
+          );
+        }
+      }, 3000); // Cada 3 segundos
+
+      pollingIntervals.set(printerId, pollingInterval);
     });
 
     client.on('message', (topic, message) => {
@@ -282,6 +310,13 @@ function connectToPrinter(printerId, ip, accessCode, serialNumber) {
     client.on('close', () => {
       activePrinters.delete(printerId);
       
+      // Limpiar polling
+      if (pollingIntervals.has(printerId)) {
+        clearInterval(pollingIntervals.get(printerId));
+        pollingIntervals.delete(printerId);
+        console.log(`[MQTT] Polling detenido para ${printerId}`);
+      }
+      
       // Marcar impresora como offline
       updatePrinterStatusInDB(printerId, 'offline', 'OFFLINE');
       
@@ -312,6 +347,14 @@ function disconnectFromPrinter(printerId) {
   if (client) {
     client.end();
     activePrinters.delete(printerId);
+    
+    // Limpiar polling
+    if (pollingIntervals.has(printerId)) {
+      clearInterval(pollingIntervals.get(printerId));
+      pollingIntervals.delete(printerId);
+      console.log(`[MQTT] Polling detenido para ${printerId}`);
+    }
+    
     console.log(`[MQTT] Desconectado de impresora ${printerId}`);
     
     // Marcar como offline

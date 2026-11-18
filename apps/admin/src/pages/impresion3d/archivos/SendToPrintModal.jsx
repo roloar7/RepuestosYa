@@ -56,11 +56,11 @@ export function SendToPrintModal({ isOpen, onClose, file, printers, telemetry, o
     }
     
     if (telemetryData.gcode_state === 'PAUSE') {
-      return { label: "En pausa", color: "paused", canSelect: true }
+      return { label: "Pausada", color: "paused", canSelect: true }
     }
 
     // IDLE u otro estado
-    return { label: "Libre", color: "idle", canSelect: true }
+    return { label: "Conectada", color: "idle", canSelect: true }
   }
 
   // Mostrar todas las impresoras, pero algunas deshabilitadas

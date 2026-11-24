@@ -17,16 +17,26 @@ contextBridge.exposeInMainWorld('electron', {
     uploadFile: (payload) => ipcRenderer.invoke('printer:upload-file', payload),
   },
 
-  onPrinterStatus: (callback) => {
+  onFarmTelemetry: (callback) => {
     const listener = (_event, data) => callback(data);
-    ipcRenderer.on('printer-status-update', listener);
-    return () => ipcRenderer.removeListener('printer-status-update', listener);
+    ipcRenderer.on('farm:telemetry', listener);
+    return () => ipcRenderer.removeListener('farm:telemetry', listener);
   },
 
   onPrinterConnectionStatus: (callback) => {
     const listener = (_event, data) => callback(data);
-    ipcRenderer.on('printer-connection-status', listener);
-    return () => ipcRenderer.removeListener('printer-connection-status', listener);
+    ipcRenderer.on('farm:printer-connected', listener);
+    ipcRenderer.on('farm:printer-disconnected', listener);
+    return () => {
+      ipcRenderer.removeListener('farm:printer-connected', listener);
+      ipcRenderer.removeListener('farm:printer-disconnected', listener);
+    };
+  },
+
+  onPrinterError: (callback) => {
+    const listener = (_event, data) => callback(data);
+    ipcRenderer.on('farm:printer-error', listener);
+    return () => ipcRenderer.removeListener('farm:printer-error', listener);
   },
 
   onUploadProgress: (callback) => {

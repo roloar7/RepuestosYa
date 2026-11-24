@@ -119,6 +119,25 @@ export function usePrinters(userId) {
     return () => unsubscribe?.()
   }, [])
 
+  // Escuchar telemetría en tiempo real desde Electron (IPC)
+  useEffect(() => {
+    if (!window.electron?.onFarmTelemetry) return
+
+    const unsubscribe = window.electron.onFarmTelemetry((telemetry) => {
+      if (!window.__cancelledPrinters) {
+        setPrinters((prev) =>
+          prev.map((p) => 
+            p.id === telemetry.printer_id 
+              ? { ...p, status: telemetry.status }
+              : p
+          )
+        )
+      }
+    })
+
+    return () => unsubscribe?.()
+  }, [])
+
   /**
    * Agregar impresora a la BD y conectar MQTT en Electron
    */
@@ -155,9 +174,13 @@ export function usePrinters(userId) {
         try {
           await window.electron.printer.connect({
             id: data.id,
+            name: data.name,
             ip: ip.trim(),
-            access_code: accessCode || "00000000",
-            serial_number: serialNumber.trim(),
+            protocol: data.protocol || 'bambu_lan',
+            credentials: {
+              access_code: accessCode || "00000000",
+              serial_number: serialNumber.trim(),
+            },
           })
         } catch (mqttErr) {
           console.error("[usePrinters] Error conectando MQTT:", mqttErr.message)

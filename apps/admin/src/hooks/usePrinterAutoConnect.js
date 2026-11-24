@@ -18,8 +18,8 @@ export function usePrinterAutoConnect(printers) {
       return
     }
 
-    // Marcar como conectado para evitar futuras ejecuciones
-    hasConnected.current = true
+    // Marcar como desconectado y despues valida
+    hasConnected.current = false
 
     console.log(`[usePrinterAutoConnect] Intentando conectar ${printers.length} impresoras...`)
 
@@ -28,12 +28,16 @@ export function usePrinterAutoConnect(printers) {
       if (printer.serial_number && printer.ip && printer.access_code) {
         console.log(`[usePrinterAutoConnect] Iniciando conexión a ${printer.name} (${printer.ip})...`)
         
-        // Intentar conectar
+        // Intentar conectar con protocolo y credenciales correctas
         window.electron.printer.connect({
           id: printer.id,
+          name: printer.name,
           ip: printer.ip,
-          access_code: printer.access_code,
-          serial_number: printer.serial_number,
+          protocol: printer.protocol || 'bambu_lan',
+          credentials: {
+            access_code: printer.access_code,
+            serial_number: printer.serial_number,
+          },
         }).catch((err) => {
           console.error(`[usePrinterAutoConnect] Error en ${printer.name}:`, err.message)
         })

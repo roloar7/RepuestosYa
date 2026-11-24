@@ -1,21 +1,27 @@
 const { app, BrowserWindow, ipcMain } = require('electron');
-const mqtt = require('mqtt');
 const path = require('path');
 const { autoUpdater } = require('electron-updater');
 const fetch = require('node-fetch');
-const fs = require('fs');
-const { Client: FTPClient } = require('basic-ftp');
+
+// Importar arquitectura de drivers
+const PrinterFarmManager = require('./lib/farm/PrinterFarmManager');
+const TransportLayer = require('./lib/farm/TransportLayer');
+const { setupPrinterHandlers } = require('./handlers/printer-handlers');
 
 const isDev = !app.isPackaged;
 let mainWindow = null;
-let activePrinters = new Map(); // Map de printer_id -> MQTT client
-let pollingIntervals = new Map(); // Map de printer_id -> polling interval
 
-// Variables de Supabase - obtenidas del mainWindow después de cargar
+// Variables de Supabase
 let SUPABASE_URL = null;
 let SUPABASE_ANON_KEY = null;
+let supabaseClient = null;
 
-// Función para actualizar bridge status en BD
+// Instancias globales
+let farmManager = null;
+let transportLayer = null;
+let handlersRegistered = false;
+
+// ===== BRIDGE STATUS EN BD =====
 async function updateBridgeStatusInDB(isConnected) {
   try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/bridge_status?id=eq.1`, {
@@ -40,91 +46,10 @@ async function updateBridgeStatusInDB(isConnected) {
   }
 }
 
-// Función para actualizar el estado de una impresora específica en BD
-async function updatePrinterStatusInDB(printerId, status, gcodeState) {
-  try {
-    const url = `${SUPABASE_URL}/rest/v1/printers?id=eq.${printerId}`;
-    
-    const body = JSON.stringify({
-      status: status,
-      last_seen_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-
-    const response = await fetch(url, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: body,
-    });
-
-    if (!response.ok) {
-      const responseText = await response.text();
-      console.error(`[Printer] Error ${response.status}:`, responseText);
-    }
-  } catch (err) {
-    console.error(`[Printer] Error actualizando BD para ${printerId}:`, err.message);
-  }
-}
-
-// Map para mantener canales Realtime por impresora
-const telemetryChannels = new Map();
-
-// Instancia global de cliente Supabase para Realtime
-let supabaseRTClient = null;
-
-function initSupabaseRT() {
-  if (!supabaseRTClient) {
-    const { createClient } = require('@supabase/supabase-js');
-    supabaseRTClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
-  }
-  return supabaseRTClient;
-}
-
-// Función para transmitir telemetría via Supabase Realtime
-async function broadcastTelemetryToReact(printerId, nozzleTemp, bedTemp, progress, gcodeState) {
-  try {
-    const supabase = initSupabaseRT();
-
-    // Obtener o crear canal para esta impresora
-    let channel = telemetryChannels.get(printerId);
-    if (!channel) {
-      channel = supabase.channel(`printer:${printerId}:telemetry`);
-      
-      channel.subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          console.log(`[Realtime] Canal listo para ${printerId}`);
-        }
-      });
-      
-      telemetryChannels.set(printerId, channel);
-    }
-
-    // Enviar telemetría usando httpSend (REST API)
-    await channel.send({
-      type: 'broadcast',
-      event: 'telemetry',
-      payload: {
-        printer_id: printerId,
-        nozzle_temp: nozzleTemp,
-        bed_temp: bedTemp,
-        progress: progress,
-        gcode_state: gcodeState,
-        timestamp: new Date().toISOString(),
-      },
-    });
-  } catch (err) {
-    console.error(`[Realtime] Error:`, err.message);
-  }
-}
-
-// Configurar electron-updater para GitHub Releases
+// ===== CONFIGURAR ELECTRON-UPDATER =====
 autoUpdater.allowDowngrade = false;
 autoUpdater.autoDownload = false;
-autoUpdater.autoInstallOnAppQuit = false; // Instalamos manualmente con delay
+autoUpdater.autoInstallOnAppQuit = false;
 
 if (!isDev) {
   autoUpdater.setFeedURL({
@@ -159,310 +84,85 @@ autoUpdater.on('update-downloaded', () => {
   }
 });
 
-// ===== FUNCIONES MQTT =====
-function connectToPrinter(printerId, ip, accessCode, serialNumber) {
-  console.log(`[MQTT] Iniciando conexión a ${printerId} (${ip}:8883)...`);
-  
-  if (activePrinters.has(printerId)) {
-    console.log(`[MQTT] Impresora ${printerId} ya conectada`);
-    return;
-  }
-
-  // Marcar como offline inmediatamente (intentando conectar)
-  updatePrinterStatusInDB(printerId, 'offline', 'CONNECTING');
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('printer-connection-status', {
-      printer_id: printerId,
-      is_connected: false,
-      status: 'offline',
-    });
-  }
-
-  try {
-    const mqttUrl = `mqtts://${ip}:8883`;
-    console.log(`[MQTT] URL: ${mqttUrl}, usuario: bblp`);
-    
-    const client = mqtt.connect(mqttUrl, {
-      username: 'bblp',
-      password: accessCode,
-      protocolVersion: 4,       // Forzar MQTT 3.1.1 (como Bambu Studio)
-      clean: true,              // Evita saturar la memoria del broker embebido
-      keepalive: 10,            // PING MQTT cada 10 segundos
-      reconnectPeriod: 2000,    // Reconexión rápida si el Wi-Fi parpadea
-      connectTimeout: 10000,    // 10 segundos timeout para conexión inicial
-      rejectUnauthorized: false,
-    });
-
-    // Timeout para conexión (10 segundos)
-    let connectionTimeout = setTimeout(() => {
-      if (!activePrinters.has(printerId)) {
-        console.error(`[MQTT] ⏱️ Timeout conectando a ${printerId}, cerrando...`);
-        client.end(true, () => {
-          console.log(`[MQTT] Conexión cerrada por timeout para ${printerId}`);
-        });
-        updatePrinterStatusInDB(printerId, 'offline', 'TIMEOUT');
-      }
-    }, 10000);
-
-    client.on('connect', () => {
-      clearTimeout(connectionTimeout); // Limpiar timeout cuando conecta
-      console.log(`[MQTT] ✅ Impresora ${printerId} conectada exitosamente`);
-      client.subscribe(`device/${serialNumber}/report`, { qos: 0 });
-      
-      // Agregar a lista de impresoras activas
-      activePrinters.set(printerId, client);
-      
-      // Actualizar BD cuando hay al menos una impresora conectada
-      updateBridgeStatusInDB(true);
-      
-      // Marcar impresora como conectada
-      updatePrinterStatusInDB(printerId, 'idle', 'IDLE');
-      
-      // Notificar a React sobre el cambio de conexión
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('printer-connection-status', {
-          printer_id: printerId,
-          is_connected: true,
-          status: 'idle',
-        });
-      }
-
-      // 🔄 Polling activo: obtener estado cada 3 segundos (como Bambu Studio)
-      // Esto mantiene el Wi-Fi de la A1 despierto y obtiene datos más estables
-      if (pollingIntervals.has(printerId)) {
-        clearInterval(pollingIntervals.get(printerId));
-      }
-
-      const pollingInterval = setInterval(() => {
-        if (client.connected) {
-          console.log(`[MQTT] Polling ${printerId}: enviando pushall...`);
-          client.publish(
-            `device/${serialNumber}/request`,
-            JSON.stringify({
-              pushing: { 
-                sequence_id: Date.now().toString(), 
-                command: 'pushall' 
-              }
-            }),
-            { qos: 0 }
-          );
-        }
-      }, 3000); // Cada 3 segundos
-
-      pollingIntervals.set(printerId, pollingInterval);
-    });
-
-    client.on('message', (topic, message) => {
-      try {
-        const data = JSON.parse(message.toString());
-        
-        if (data.print) {
-          // Determinar estado de la impresora basado en gcode_state
-          let printerStatus = 'idle';
-          const gcodeState = data.print.gcode_state ?? 'IDLE';
-          
-          if (gcodeState === 'RUNNING' || gcodeState === 'PRINTING') {
-            printerStatus = 'printing';
-          } else if (gcodeState === 'PAUSE') {
-            printerStatus = 'paused';
-          }
-          
-          // Extraer datos de telemetría (redondeados)
-          const nozzleTemp = Math.round(data.print.nozzle_temper ?? 0); // Convierte 220.03125 en 220
-          const bedTemp = Math.round(data.print.bed_temper ?? 0);       // Convierte 65.03125 en 65
-          const progress = data.print.mc_percent ?? 0;
-          
-          // Actualizar estado en BD
-          updatePrinterStatusInDB(printerId, printerStatus, gcodeState);
-          
-          // Transmitir telemetría en tiempo real via Realtime
-          broadcastTelemetryToReact(printerId, nozzleTemp, bedTemp, progress, gcodeState);
-          
-          const telemetry = {
-            printer_id: printerId,
-            nozzle_temp: nozzleTemp,
-            bed_temp: bedTemp,
-            progress: progress,
-            gcode_state: gcodeState,
-          };
-
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('printer-status-update', telemetry);
-          }
-        }
-      } catch (err) {
-        // Silenciar errores de parseo de telemetría
-      }
-    });
-
-    client.on('error', (err) => {
-      console.error(`[MQTT] Error en ${printerId}: ${err.message}`);
-      // Marcar como error/offline si hay problema de conexión
-      const status = err.message.includes('Timeout') ? 'offline' : 'error';
-      updatePrinterStatusInDB(printerId, status, 'ERROR');
-      
-      // Cerrar la conexión para evitar reintentatos
-      client.end(true, () => {
-        console.log(`[MQTT] Conexión cerrada para ${printerId}`);
-      });
-    });
-
-    client.on('close', () => {
-      activePrinters.delete(printerId);
-      
-      // Limpiar polling
-      if (pollingIntervals.has(printerId)) {
-        clearInterval(pollingIntervals.get(printerId));
-        pollingIntervals.delete(printerId);
-        console.log(`[MQTT] Polling detenido para ${printerId}`);
-      }
-      
-      // Marcar impresora como offline
-      updatePrinterStatusInDB(printerId, 'offline', 'OFFLINE');
-      
-      // Notificar a React sobre el cambio de desconexión
-      if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('printer-connection-status', {
-          printer_id: printerId,
-          is_connected: false,
-          status: 'offline',
-        });
-      }
-      
-      // Actualizar BD cuando no hay impresoras conectadas
-      if (activePrinters.size === 0) {
-        updateBridgeStatusInDB(false);
-      }
-    });
-
-  } catch (err) {
-    console.error(`[MQTT] Error al conectar ${printerId}: ${err.message}`);
-    // Marcar como error si no se puede conectar
-    updatePrinterStatusInDB(printerId, 'error', 'ERROR');
-  }
-}
-
-function disconnectFromPrinter(printerId) {
-  const client = activePrinters.get(printerId);
-  if (client) {
-    client.end();
-    activePrinters.delete(printerId);
-    
-    // Limpiar polling
-    if (pollingIntervals.has(printerId)) {
-      clearInterval(pollingIntervals.get(printerId));
-      pollingIntervals.delete(printerId);
-      console.log(`[MQTT] Polling detenido para ${printerId}`);
-    }
-    
-    console.log(`[MQTT] Desconectado de impresora ${printerId}`);
-    
-    // Marcar como offline
-    updatePrinterStatusInDB(printerId, 'offline', 'OFFLINE');
-    
-    // Actualizar BD cuando se desconecta
-    if (activePrinters.size === 0) {
-      updateBridgeStatusInDB(false);
-    }
-  }
-}
-
 // ===== HANDLERS IPC =====
-ipcMain.handle('app:init-supabase', (event, { supabaseUrl, supabaseKey }) => {
+ipcMain.handle('app:init-supabase', async (event, { supabaseUrl, supabaseKey }) => {
   SUPABASE_URL = supabaseUrl;
   SUPABASE_ANON_KEY = supabaseKey;
   console.log('[ENV] Supabase configurado desde React ✅');
-  return { success: true };
-});
 
-ipcMain.handle('printer:connect', (event, printer) => {
-  console.log(`[IPC] Recibido printer:connect para ${printer.id}`);
-  console.log(`[IPC] Detalles: ${printer.ip}:${printer.access_code}:${printer.serial_number}`);
-  connectToPrinter(printer.id, printer.ip, printer.access_code, printer.serial_number);
-  return { success: true };
-});
-
-ipcMain.handle('printer:disconnect', (event, printerId) => {
-  disconnectFromPrinter(printerId);
-  return { success: true };
-});
-
-ipcMain.handle('printer:upload-file', async (event, { fileName, fileBuffer, printer }) => {
-  const client = new FTPClient();
-  
-  try {
-    if (!fileName || !fileBuffer || !printer.ip) {
-      throw new Error('Datos incompletos');
-    }
-
-    console.log(`[FTP] Conectando a ${printer.ip}:990 (FTPS implícito)...`);
-    console.log(`[FTP] Tamaño del archivo: ${fileBuffer.length} bytes`);
-
-    // Conectar por FTPS implícito (Bambu Lab)
-    await client.access({
-      host: printer.ip,
-      port: 990,
-      user: 'bblp',
-      password: printer.access_code,
-      secure: 'implicit', // FTPS implícito (comienza con TLS directamente)
-      secureOptions: {
-        rejectUnauthorized: false, // Acepta certificado autofirmado
-      },
-      timeout: 30000,
-      pasvTimeout: 30000,
-    });
-
-    console.log(`[FTP] ✅ Conectado a ${printer.ip}`);
-
-    // Configurar progreso
-    client.trackProgress((info) => {
-      const progress = Math.round((info.bytes / info.bytesOverall) * 100);
-      console.log(`[FTP] Progreso: ${progress}%`);
-      event.sender.send('printer:upload-progress', {
-        fileName: fileName,
-        progress: progress,
-        bytesTransferred: info.bytes,
-        bytesTotal: info.bytesOverall,
-      });
-    });
-
-    // Convertir buffer a Buffer de Node
-    const buffer = Buffer.from(fileBuffer);
-    
-    console.log(`[FTP] Iniciando upload de ${fileName}...`);
-    
-    // Subir archivo a la raíz remota
-    await client.uploadFrom(buffer, `/${fileName}`);
-    
-    console.log(`[FTP] ✅ ${fileName} subido exitosamente a ${printer.ip}`);
-    
-    return { 
-      success: true, 
-      fileName: fileName,
-    };
-  } catch (err) {
-    console.error(`[FTP] Error:`, err.message);
-    console.error(`[FTP] Stack:`, err.stack);
-    return { 
-      success: false, 
-      error: err.message,
-    };
-  } finally {
+  // Inicializar Supabase client para Realtime
+  if (!supabaseClient) {
     try {
-      await client.close();
-      console.log(`[FTP] Conexión cerrada`);
+      const { createClient } = require('@supabase/supabase-js');
+      supabaseClient = createClient(supabaseUrl, supabaseKey);
     } catch (err) {
-      console.error(`[FTP] Error cerrando conexión:`, err.message);
+      console.error('[Supabase] Error creando cliente:', err.message);
     }
   }
+  
+  // Inicializar PrinterFarmManager después de que Supabase esté disponible
+  if (!farmManager) {
+    farmManager = new PrinterFarmManager();
+    
+    // Escuchar cambios de conexión
+    farmManager.on('printer-connected', (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('farm:printer-connected', data);
+      }
+      
+      // Actualizar bridge status en BD
+      const anyConnected = farmManager.getStatus().printers.some(p => p.is_connected);
+      updateBridgeStatusInDB(anyConnected);
+    });
+
+    farmManager.on('printer-disconnected', (data) => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('farm:printer-disconnected', data);
+      }
+      
+      // Actualizar bridge status en BD
+      const anyConnected = farmManager.getStatus().printers.some(p => p.is_connected);
+      updateBridgeStatusInDB(anyConnected);
+    });
+
+    // Escuchar errores
+    farmManager.on('printer-error', (data) => {
+      console.error('[Farm] Error en impresora:', data.error);
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('farm:printer-error', data);
+      }
+    });
+  }
+
+  // Inicializar TransportLayer después de crear farmManager
+  if (!transportLayer) {
+    transportLayer = new TransportLayer({
+      mainWindow,
+      supabaseClient,
+      telemetryThrottle: 3000,
+    });
+
+    await transportLayer.initialize(farmManager);
+    farmManager.setTransport(transportLayer);
+  }
+
+  // Registrar handlers IPC solo una vez
+  if (!handlersRegistered) {
+    setupPrinterHandlers(ipcMain, farmManager, mainWindow);
+    handlersRegistered = true;
+  }
+  
+  return { success: true };
 });
 
+// Handler para obtener versión
 ipcMain.handle('updater:get-version', async () => {
   return {
     currentVersion: app.getVersion(),
   };
 });
 
+// Handler para verificar actualizaciones
 ipcMain.handle('updater:check-for-updates', async () => {
   try {
     const result = await autoUpdater.checkForUpdates();
@@ -481,6 +181,7 @@ ipcMain.handle('updater:check-for-updates', async () => {
   }
 });
 
+// Handler para descargar e instalar actualización
 ipcMain.handle('updater:download-and-install', async () => {
   try {
     const checkResult = await autoUpdater.checkForUpdates();
@@ -536,23 +237,24 @@ ipcMain.handle('updater:download-and-install', async () => {
   }
 });
 
-ipcMain.on('updater:quit-and-install', () => {
+// Handler para instalar actualización
+ipcMain.on('updater:quit-and-install', async () => {
   try {
     console.log('[Updater] Iniciando instalación...');
-    // Cerrar todos los listeners de MQTT antes de cerrar
-    activePrinters.forEach((client) => {
-      try {
-        client.end();
-      } catch (e) {
-        // ignore
-      }
-    });
-    activePrinters.clear();
-
-    // Esperar 1000ms para permitir que se cierren recursos y archivos
+    
+    // Desconectar todas las impresoras y apagar transport
+    if (farmManager) {
+      await farmManager.shutdown();
+    }
+    
+    if (transportLayer) {
+      await transportLayer.shutdown();
+    }
+    
+    // Esperar 1000ms para permitir que se cierren recursos
     setTimeout(() => {
       console.log('[Updater] Instalando actualización...');
-      autoUpdater.quitAndInstall(false, true); // force = false, diff = true
+      autoUpdater.quitAndInstall(false, true);
     }, 1000);
   } catch (error) {
     console.error('[Updater] Error:', error.message);
@@ -586,6 +288,7 @@ function createWindow() {
   });
 }
 
+// ===== CICLO DE VIDA DE ELECTRON =====
 app.whenReady().then(() => {
   createWindow();
 
@@ -596,11 +299,16 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('window-all-closed', () => {
+app.on('window-all-closed', async () => {
   // Desconectar todas las impresoras
-  activePrinters.forEach((client, printerId) => {
-    disconnectFromPrinter(printerId);
-  });
+  if (farmManager) {
+    await farmManager.shutdown();
+  }
+
+  // Apagar transport layer
+  if (transportLayer) {
+    await transportLayer.shutdown();
+  }
   
   // Marcar bridge como desconectado al cerrar app
   updateBridgeStatusInDB(false);

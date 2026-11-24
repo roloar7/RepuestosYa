@@ -1,20 +1,34 @@
 /**
  * BambuDriver - Implementación para impresoras Bambu Lab (A1, P1, X1)
- * Maneja MQTT, FTPS, Cámara y normalización de telemetría
+ * Maneja MQTT, FTPS, Cámara (puerto 6000) y normalización de telemetría
  */
 const mqtt = require('mqtt');
+const tls = require('tls');
+const fs = require('fs');
 const { Client: FTPClient } = require('basic-ftp');
 const BasePrinterDriver = require('./BasePrinterDriver');
-const {\n  MQTT_CONFIG,\n  POLLING_CONFIG,\n  FTPS_CONFIG,\n  GCODE_STATES,\n  PRINTER_STATUS,\n} = require('../utils/constants');
+const { MQTT_CONFIG, POLLING_CONFIG } = require('../utils/constants');
 
 class BambuDriver extends BasePrinterDriver {
   constructor(printerConfig) {
     super(printerConfig);
     this.mqttClient = null;
-    this.ftpClient = null;
     this.pollingInterval = null;
     this.cameraSocket = null;
-    this.statefulTelemetry = {}; // Acumula estado, solo fusiona delta
+    this.cameraBuffer = Buffer.alloc(0);
+    this.isStreamingCamera = false;
+    this.statefulTelemetry = {
+      nozzle_temp: 0,
+      bed_temp: 0,
+      progress: 0,
+      gcode_state: 'IDLE',
+      status: 'idle',
+    };
+    this._confirmConnection = null;
+  }
+
+  get serialNumber() {
+    return this.credentials.serial_number || this.name;
   }
 
   /**
@@ -22,6 +36,8 @@ class BambuDriver extends BasePrinterDriver {
    */
   async connect() {
     return new Promise((resolve, reject) => {
+      let isSettled = false;
+
       try {
         this.log(`Conectando a ${this.ip}:8883 (MQTT)...`);
 
@@ -29,50 +45,55 @@ class BambuDriver extends BasePrinterDriver {
         this.mqttClient = mqtt.connect(mqttUrl, {
           username: 'bblp',
           password: this.credentials.access_code || '00000000',
-          protocolVersion: MQTT_CONFIG.PROTOCOL_VERSION,
-          clean: MQTT_CONFIG.CLEAN_SESSION,
-          keepalive: MQTT_CONFIG.KEEPALIVE,
-          reconnectPeriod: MQTT_CONFIG.RECONNECT_PERIOD,
-          connectTimeout: MQTT_CONFIG.CONNECT_TIMEOUT,
-          rejectUnauthorized: false, // Certificado autofirmado\n        });
+          protocolVersion: MQTT_CONFIG.PROTOCOL_VERSION || 4,
+          clean: MQTT_CONFIG.CLEAN_SESSION ?? true,
+          keepalive: MQTT_CONFIG.KEEPALIVE || 10,
+          reconnectPeriod: MQTT_CONFIG.RECONNECT_PERIOD || 3000,
+          connectTimeout: MQTT_CONFIG.CONNECT_TIMEOUT || 10000,
+          rejectUnauthorized: false,
+        });
 
-        // Timeout para conexión inicial
-        let connectionTimeout = setTimeout(() => {
-          if (!this.isConnected) {
+        const connectionTimeout = setTimeout(() => {
+          if (!isSettled) {
+            isSettled = true;
             this.logError('Timeout conectando, cerrando...');
             this.mqttClient?.end(true);
             reject(new Error('Connection timeout'));
           }
-        }, MQTT_CONFIG.CONNECT_TIMEOUT);
+        }, MQTT_CONFIG.CONNECT_TIMEOUT || 10000);
 
         this.mqttClient.on('connect', () => {
           clearTimeout(connectionTimeout);
-          this.isConnected = true;
-          this.logSuccess('Conectado vía MQTT');
+          this.log('Conexión MQTT establecida, esperando telemetría...');
 
-          // Suscribirse a telemetría
-          const serialNumber = this.credentials.serial_number || this.name;
-          this.mqttClient.subscribe(`device/${serialNumber}/report`, { qos: 0 });
+          this.mqttClient.subscribe(`device/${this.serialNumber}/report`, { qos: 0 });
+          this._publishPushAll();
 
-          // 🔄 Polling activo: obtener estado cada 3 segundos (como Bambu Studio)
-          if (this.pollingInterval) clearInterval(this.pollingInterval);
-          this.pollingInterval = setInterval(() => {
-            if (this.mqttClient?.connected) {
-              this.mqttClient.publish(
-                `device/${serialNumber}/request`,
-                JSON.stringify({
-                  pushing: {
-                    sequence_id: Date.now().toString(),
-                    command: POLLING_CONFIG.COMMAND,
-                  },
-                }),
-                { qos: 0 }
-              );
+          const telemetryTimeout = setTimeout(() => {
+            if (!isSettled) {
+              isSettled = true;
+              this.logError('No se recibió telemetría, impresora no responde');
+              this.mqttClient?.end(true);
+              reject(new Error('No telemetry received - printer not responding'));
             }
-          }, POLLING_CONFIG.INTERVAL);
+          }, 10000);
 
-          this.emit('connect');
-          resolve({ success: true });
+          this._confirmConnection = () => {
+            clearTimeout(telemetryTimeout);
+            this.isConnected = true;
+            this.logSuccess('Conectado vía MQTT (telemetría recibida)');
+
+            if (this.pollingInterval) clearInterval(this.pollingInterval);
+            this.pollingInterval = setInterval(() => {
+              this._publishPushAll();
+            }, POLLING_CONFIG.INTERVAL || 3000);
+
+            this.emit('connect');
+            if (!isSettled) {
+              isSettled = true;
+              resolve({ success: true });
+            }
+          };
         });
 
         this.mqttClient.on('message', (topic, message) => {
@@ -80,38 +101,58 @@ class BambuDriver extends BasePrinterDriver {
             const data = JSON.parse(message.toString());
             this.handleMQTTMessage(data);
           } catch (err) {
-            // Silenciar errores de parseo
+            // Ignorar paquetes malformados
           }
         });
 
         this.mqttClient.on('error', (err) => {
           this.logError(`Error MQTT: ${err.message}`);
           this.emit('error', { error: err.message });
-          reject(err);
+          if (!isSettled) {
+            isSettled = true;
+            clearTimeout(connectionTimeout);
+            reject(err);
+          }
         });
 
         this.mqttClient.on('close', () => {
           this.isConnected = false;
+          this._confirmConnection = null;
           this.log('Desconectado de MQTT');
-          if (this.pollingInterval) {
-            clearInterval(this.pollingInterval);
-          }
+          if (this.pollingInterval) clearInterval(this.pollingInterval);
           this.emit('disconnect');
         });
       } catch (err) {
         this.logError(`Error en connect(): ${err.message}`);
-        reject(err);
+        if (!isSettled) reject(err);
       }
     });
   }
 
+  _publishPushAll() {
+    if (this.mqttClient?.connected) {
+      this.mqttClient.publish(
+        `device/${this.serialNumber}/request`,
+        JSON.stringify({
+          pushing: {
+            sequence_id: Date.now().toString(),
+            command: POLLING_CONFIG.COMMAND || 'pushall',
+          },
+        }),
+        { qos: 0 }
+      );
+    }
+  }
+
   /**
-   * Desconectar de impresora
+   * Desconectar de impresora y cerrar cámara si está activa
    */
   async disconnect() {
+    await this.stopCamera();
     return new Promise((resolve) => {
       try {
         if (this.pollingInterval) clearInterval(this.pollingInterval);
+        this._confirmConnection = null;
         if (this.mqttClient) {
           this.mqttClient.end(true, () => {
             this.logSuccess('Desconectado');
@@ -128,50 +169,47 @@ class BambuDriver extends BasePrinterDriver {
   }
 
   /**
-   * Maneja mensajes MQTT entrantes
-   * Implementa Stateful Merging: acumula estado, solo fusiona delta
+   * Maneja mensajes MQTT entrantes con Stateful Merging
    */
   handleMQTTMessage(data) {
+    if (this._confirmConnection) {
+      this._confirmConnection();
+      this._confirmConnection = null;
+    }
+
     if (data.print) {
-      // Fusionar solo los campos que vienen en el mensaje
+      const p = data.print;
+      const mergedGcodeState = p.gcode_state !== undefined ? p.gcode_state : this.statefulTelemetry.gcode_state;
+
       const newTelemetry = {
-        nozzle_temp: data.print.nozzle_temper ? Math.round(data.print.nozzle_temper) : this.statefulTelemetry.nozzle_temp || 0,
-        bed_temp: data.print.bed_temper ? Math.round(data.print.bed_temper) : this.statefulTelemetry.bed_temp || 0,
-        progress: data.print.mc_percent ?? this.statefulTelemetry.progress ?? 0,
-        gcode_state: data.print.gcode_state ?? this.statefulTelemetry.gcode_state ?? 'IDLE',
-        status: this.mapGcodeStateToStatus(data.print.gcode_state),
+        nozzle_temp: p.nozzle_temper !== undefined ? Math.round(p.nozzle_temper) : this.statefulTelemetry.nozzle_temp,
+        bed_temp: p.bed_temper !== undefined ? Math.round(p.bed_temper) : this.statefulTelemetry.bed_temp,
+        progress: p.mc_percent !== undefined ? p.mc_percent : this.statefulTelemetry.progress,
+        gcode_state: mergedGcodeState,
+        status: this.mapGcodeStateToStatus(mergedGcodeState),
       };
 
-      // Detectar cambios de estado (para throttling)
       const stateChanged =
         this.statefulTelemetry.gcode_state !== newTelemetry.gcode_state ||
         this.statefulTelemetry.progress !== newTelemetry.progress;
 
-      // Actualizar estado acumulado
       this.statefulTelemetry = { ...this.statefulTelemetry, ...newTelemetry };
       this.lastTelemetry = newTelemetry;
 
-      // Emitir evento con telemetría
       this.emit('telemetry', {
-        telemetry: newTelemetry,
-        stateChanged, // Indica si hubo cambio importante
+        telemetry: this.getNormalizedTelemetry(),
+        stateChanged,
       });
     }
   }
 
-  /**
-   * Mapear gcode_state a status normalizado
-   */
   mapGcodeStateToStatus(gcodeState) {
     if (!gcodeState) return 'idle';
-    if (gcodeState === 'RUNNING' || gcodeState === 'PRINTING') return 'printing';
+    if (gcodeState === 'RUNNING' || gcodeState === 'PRINTING' || gcodeState === 'PREPARE') return 'printing';
     if (gcodeState === 'PAUSE') return 'paused';
     return 'idle';
   }
 
-  /**
-   * Obtener telemetría normalizada
-   */
   getNormalizedTelemetry() {
     return {
       printer_id: this.id,
@@ -190,67 +228,58 @@ class BambuDriver extends BasePrinterDriver {
    * Subir archivo vía FTPS e iniciar impresión
    */
   async uploadAndPrint(filePath, fileName) {
+    const ftp = new FTPClient();
     try {
       this.log(`Iniciando upload FTPS de ${fileName}...`);
 
-      const ftp = new FTPClient();
       await ftp.access({
         host: this.ip,
         port: 990,
         user: 'bblp',
         password: this.credentials.access_code || '00000000',
-        secure: 'implicit', // FTPS implícito
+        secure: 'implicit',
         secureOptions: { rejectUnauthorized: false },
         timeout: 30000,
       });
 
-      // Cambiar a directorio de uploads
       await ftp.cd('/cache/');
-
-      // Subir archivo
-      const fs = require('fs');
       await ftp.uploadFrom(fs.createReadStream(filePath), fileName);
-
       this.logSuccess(`Archivo ${fileName} subido`);
 
-      // Enviar comando para iniciar impresión
-      const serialNumber = this.credentials.serial_number || this.name;
-      this.mqttClient?.publish(
-        `device/${serialNumber}/request`,
-        JSON.stringify({
-          print: {
-            sequence_id: Date.now().toString(),
-            command: 'project_file',
-            param: fileName,
-          },
-        }),
-        { qos: 2 }
-      );
-
-      await ftp.close();
+      this._sendPrintCommand('project_file', fileName);
       return { success: true };
     } catch (err) {
       this.logError(`Error en uploadAndPrint(): ${err.message}`);
       return { success: false, error: err.message };
+    } finally {
+      ftp.close();
     }
   }
 
   /**
-   * Pausa la impresión
+   * Helper centralizado para comandos de control
    */
+  _sendPrintCommand(command, param = '') {
+    if (!this.mqttClient?.connected) {
+      throw new Error('La impresora no está conectada por MQTT');
+    }
+
+    this.mqttClient.publish(
+      `device/${this.serialNumber}/request`,
+      JSON.stringify({
+        print: {
+          sequence_id: Date.now().toString(),
+          command,
+          param,
+        },
+      }),
+      { qos: 0 }
+    );
+  }
+
   async pause() {
     try {
-      const serialNumber = this.credentials.serial_number || this.name;
-      this.mqttClient?.publish(
-        `device/${serialNumber}/request`,
-        JSON.stringify({
-          print: {
-            sequence_id: Date.now().toString(),
-            command: 'pause',
-          },
-        }),
-        { qos: 2 }
-      );
+      this._sendPrintCommand('pause');
       this.log('Comando pause enviado');
       return { success: true };
     } catch (err) {
@@ -259,22 +288,9 @@ class BambuDriver extends BasePrinterDriver {
     }
   }
 
-  /**
-   * Reanuda la impresión
-   */
   async resume() {
     try {
-      const serialNumber = this.credentials.serial_number || this.name;
-      this.mqttClient?.publish(
-        `device/${serialNumber}/request`,
-        JSON.stringify({
-          print: {
-            sequence_id: Date.now().toString(),
-            command: 'resume',
-          },
-        }),
-        { qos: 2 }
-      );
+      this._sendPrintCommand('resume');
       this.log('Comando resume enviado');
       return { success: true };
     } catch (err) {
@@ -283,22 +299,9 @@ class BambuDriver extends BasePrinterDriver {
     }
   }
 
-  /**
-   * Detiene la impresión
-   */
   async stop() {
     try {
-      const serialNumber = this.credentials.serial_number || this.name;
-      this.mqttClient?.publish(
-        `device/${serialNumber}/request`,
-        JSON.stringify({
-          print: {
-            sequence_id: Date.now().toString(),
-            command: 'stop',
-          },
-        }),
-        { qos: 2 }
-      );
+      this._sendPrintCommand('stop');
       this.log('Comando stop enviado');
       return { success: true };
     } catch (err) {
@@ -308,30 +311,84 @@ class BambuDriver extends BasePrinterDriver {
   }
 
   /**
-   * Iniciar stream de cámara (placeholder - implementar en futuro)
+   * Iniciar stream de cámara (Puerto 6000 TLS binario para A1 / P1)
    */
   async startCamera(onFrameCallback) {
-    try {
-      this.log('Camera stream iniciado (placeholder)');
-      // Implementación futura: socket TLS a puerto 6000
-      return { success: true };
-    } catch (err) {
-      this.logError(`Error en startCamera(): ${err.message}`);
-      return { success: false, error: err.message };
-    }
+    if (this.isStreamingCamera) return { success: true };
+
+    return new Promise((resolve) => {
+      try {
+        this.isStreamingCamera = true;
+        this.cameraBuffer = Buffer.alloc(0);
+
+        this.cameraSocket = tls.connect(
+          {
+            host: this.ip,
+            port: 6000,
+            rejectUnauthorized: false,
+          },
+          () => {
+            this.logSuccess('Stream de cámara conectado (puerto 6000)');
+
+            // Paquete de autenticación binario de 80 bytes
+            const authPacket = Buffer.alloc(80);
+            authPacket.writeUInt32LE(0x40, 0);
+            authPacket.writeUInt32LE(0x3000, 4);
+            authPacket.write('bblp', 16, 'ascii');
+            authPacket.write(this.credentials.access_code || '00000000', 48, 'ascii');
+
+            this.cameraSocket.write(authPacket);
+            resolve({ success: true });
+          }
+        );
+
+        this.cameraSocket.on('data', (chunk) => {
+          this.cameraBuffer = Buffer.concat([this.cameraBuffer, chunk]);
+
+          // Cada frame tiene 16 bytes de cabecera con el tamaño del JPEG en los primeros 4 bytes
+          while (this.cameraBuffer.length >= 16) {
+            const payloadSize = this.cameraBuffer.readUInt32LE(0);
+            const totalSize = 16 + payloadSize;
+
+            if (this.cameraBuffer.length < totalSize) break;
+
+            const jpegFrame = this.cameraBuffer.subarray(16, totalSize);
+            this.cameraBuffer = this.cameraBuffer.subarray(totalSize);
+
+            if (typeof onFrameCallback === 'function') {
+              onFrameCallback(jpegFrame.toString('base64'));
+            }
+          }
+        });
+
+        this.cameraSocket.on('error', (err) => {
+          this.logError(`Error en cámara: ${err.message}`);
+          this.stopCamera();
+        });
+
+        this.cameraSocket.on('close', () => {
+          this.isStreamingCamera = false;
+          this.log('Stream de cámara cerrado');
+        });
+      } catch (err) {
+        this.logError(`Error en startCamera(): ${err.message}`);
+        this.isStreamingCamera = false;
+        resolve({ success: false, error: err.message });
+      }
+    });
   }
 
   /**
    * Detener stream de cámara
    */
   async stopCamera() {
-    try {
-      this.log('Camera stream detenido');
-      return { success: true };
-    } catch (err) {
-      this.logError(`Error en stopCamera(): ${err.message}`);
-      return { success: false, error: err.message };
+    this.isStreamingCamera = false;
+    if (this.cameraSocket) {
+      this.cameraSocket.destroy();
+      this.cameraSocket = null;
     }
+    this.cameraBuffer = Buffer.alloc(0);
+    return { success: true };
   }
 }
 

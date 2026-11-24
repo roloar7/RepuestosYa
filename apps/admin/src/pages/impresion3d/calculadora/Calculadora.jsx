@@ -31,20 +31,24 @@ function Calculadora() {
 
   const result = useMemo(() => {
     const grams = toNumber(weight)
-    const hours = toNumber(printHours)
-    const post = toNumber(postHours)
+    const printHoursInput = toNumber(printHours)
+    const postHoursInput = toNumber(postHours)
     const profit = toNumber(margin)
 
+    // Convertir tiempo en formato decimal (ej: 1:30 → 1.5)
+    const printHoursDecimal = Math.floor(printHoursInput) + ((printHoursInput % 1) * 100) / 60
+    const postHoursDecimal = Math.floor(postHoursInput) + ((postHoursInput % 1) * 100) / 60
+
     const materialCost = (grams / 1000) * material.pricePerKg
-    const printCost = hours * PRICE_PER_HOUR
-    const postCost = post * POST_PROCESSING_PRICE_PER_HOUR
+    const printCost = printHoursDecimal * PRICE_PER_HOUR
+    const postCost = postHoursDecimal * POST_PROCESSING_PRICE_PER_HOUR
     const productionCost = materialCost + printCost + postCost
     const profitAmount = productionCost * (profit / 100)
     const finalPrice = productionCost + profitAmount
 
     return {
       grams,
-      hours,
+      hours: printHoursDecimal,
       materialCost,
       printCost,
       postCost,
@@ -162,7 +166,7 @@ function Calculadora() {
               <strong>{currency.format(result.materialCost)}</strong>
             </li>
             <li className={styles.breakdownItem}>
-              <span>Impresión ({result.hours} h)</span>
+              <span>Impresión ({printHours} h)</span>
               <strong>{currency.format(result.printCost)}</strong>
             </li>
             <li className={styles.breakdownItem}>

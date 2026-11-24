@@ -19,5 +19,4 @@ Thumbs.db
 # Build
 dist-electron
 
-.md
-.sql
+

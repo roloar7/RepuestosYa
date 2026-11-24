@@ -1,2 +1,66 @@
-/**\n * Constantes y configuración global del sistema de impresoras\n */\n\nconst PROTOCOLS = {\n  BAMBU_LAN: 'bambu_lan',\n  KLIPPER_MOONRAKER: 'klipper_moonraker',\n};\n\nconst PRINTER_STATUS = {\n  IDLE: 'idle',\n  PRINTING: 'printing',\n  PAUSED: 'paused',\n  ERROR: 'error',\n  OFFLINE: 'offline',\n};\n\nconst GCODE_STATES = {\n  RUNNING: 'RUNNING',\n  IDLE: 'IDLE',\n  PAUSE: 'PAUSE',\n};\n\nconst MQTT_CONFIG = {\n  PROTOCOL_VERSION: 4, // MQTT 3.1.1\n  CLEAN_SESSION: true,\n  KEEPALIVE: 10, // segundos\n  RECONNECT_PERIOD: 2000, // ms\n  CONNECT_TIMEOUT: 10000, // ms\n};\n\nconst POLLING_CONFIG = {\n  INTERVAL: 3000, // ms (cada 3 segundos)\n  COMMAND: 'pushall',\n};\n\nconst TRANSPORT_CONFIG = {\n  TELEMETRY_THROTTLE: 3000, // ms\n  IPC_CHANNEL_TELEMETRY: 'farm:telemetry',\n  IPC_CHANNEL_PRINTER_CONNECTED: 'farm:printer-connected',\n  IPC_CHANNEL_PRINTER_DISCONNECTED: 'farm:printer-disconnected',\n  REALTIME_CHANNEL_TELEMETRY: 'farm-telemetry',\n  REALTIME_CHANNEL_COMMANDS: 'farm-commands',\n};\n\nconst FTPS_CONFIG = {\n  PORT: 990,\n  SECURE: 'implicit',\n  TIMEOUT: 30000, // ms\n};\n\nconst CAMERA_CONFIG = {\n  PORT: 6000,\n  SECURE: true,\n};\n\nmodule.exports = {\n  PROTOCOLS,\n  PRINTER_STATUS,\n  GCODE_STATES,\n  MQTT_CONFIG,\n  POLLING_CONFIG,\n  TRANSPORT_CONFIG,\n  FTPS_CONFIG,\n  CAMERA_CONFIG,\n};\n"})
-</invoke>
+/**
+ * Constantes y configuración global del sistema de impresoras
+ */
+
+const PROTOCOLS = {
+  BAMBU_LAN: 'bambu_lan',
+  KLIPPER_MOONRAKER: 'klipper_moonraker',
+};
+
+const PRINTER_STATUS = {
+  IDLE: 'idle',
+  PRINTING: 'printing',
+  PAUSED: 'paused',
+  ERROR: 'error',
+  OFFLINE: 'offline',
+};
+
+const GCODE_STATES = {
+  RUNNING: 'RUNNING',
+  IDLE: 'IDLE',
+  PAUSE: 'PAUSE',
+};
+
+const MQTT_CONFIG = {
+  PROTOCOL_VERSION: 4,
+  CLEAN_SESSION: true,
+  KEEPALIVE: 10,
+  RECONNECT_PERIOD: 2000,
+  CONNECT_TIMEOUT: 10000,
+};
+
+const POLLING_CONFIG = {
+  INTERVAL: 3000,
+  COMMAND: 'pushall',
+};
+
+const TRANSPORT_CONFIG = {
+  TELEMETRY_THROTTLE: 3000,
+  IPC_CHANNEL_TELEMETRY: 'farm:telemetry',
+  IPC_CHANNEL_PRINTER_CONNECTED: 'farm:printer-connected',
+  IPC_CHANNEL_PRINTER_DISCONNECTED: 'farm:printer-disconnected',
+  REALTIME_CHANNEL_TELEMETRY: 'farm-telemetry',
+  REALTIME_CHANNEL_COMMANDS: 'farm-commands',
+};
+
+const FTPS_CONFIG = {
+  PORT: 990,
+  SECURE: 'implicit',
+  TIMEOUT: 30000,
+};
+
+const CAMERA_CONFIG = {
+  PORT: 6000,
+  SECURE: true,
+};
+
+module.exports = {
+  PROTOCOLS,
+  PRINTER_STATUS,
+  GCODE_STATES,
+  MQTT_CONFIG,
+  POLLING_CONFIG,
+  TRANSPORT_CONFIG,
+  FTPS_CONFIG,
+  CAMERA_CONFIG,
+};

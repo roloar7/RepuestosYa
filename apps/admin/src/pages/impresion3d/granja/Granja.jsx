@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react"
+import { useState, useMemo } from "react"
 import { BiPlay, BiPlus, BiPrinter, BiTrash, BiPause, BiStopCircle } from "react-icons/bi"
 import { useAuthContext } from "../../../hooks/useAuthContext.js"
 import { usePrinters } from "../../../hooks/usePrinters.js"
@@ -10,29 +10,31 @@ import styles from "./Granja.module.css"
 
 const statusMeta = {
   printing: { label: "Imprimiendo", tone: "accent" },
+  paused: { label: "Pausada", tone: "warning" },
   idle: { label: "Disponible", tone: "success" },
   offline: { label: "Desconectada", tone: "muted" },
   error: { label: "Error", tone: "danger" },
 }
 
-function StatusBadge({ printer, telemetry }) {
-  // Determinar estado real basado en telemetría
-  let status = printer.status
-  
-  const data = telemetry[printer.id]
-  if (data) {
-    // Si hay telemetría, usar el gcode_state
-    if (data.gcode_state === 'IDLE' || data.gcode_state === 'PAUSE') {
-      status = 'idle'
-    } else if (data.gcode_state === 'RUNNING' || data.gcode_state === 'PRINTING') {
-      status = 'printing'
-    }
-  } else if (printer.status !== 'offline') {
-    // Sin telemetría pero debería estar conectado
-    status = 'offline'
+// Fuente única para el estado de la impresora
+function getEffectiveStatus(printer, data) {
+  if (data && data.is_connected !== false) {
+    if (data.status && statusMeta[data.status]) return data.status
+
+    const gcode = data.gcode_state
+    if (gcode === "RUNNING" || gcode === "PRINTING" || gcode === "PREPARE") return "printing"
+    if (gcode === "PAUSE") return "paused"
+    if (gcode === "IDLE" || gcode === "FINISH" || gcode === "FAILED") return "idle"
   }
 
-  const meta = statusMeta[status]
+  if (data && data.is_connected === false) return "offline"
+  if (statusMeta[printer.status]) return printer.status
+
+  return "offline"
+}
+
+function StatusBadge({ status }) {
+  const meta = statusMeta[status] || statusMeta.offline
   return (
     <span className={`${styles.badge} ${styles[`tone_${meta.tone}`]}`}>
       <span className={styles.badgeDot} />
@@ -41,39 +43,22 @@ function StatusBadge({ printer, telemetry }) {
   )
 }
 
-function PrinterCard({ printer, telemetry, onDelete, onPause, onResume, onStop }) {
-  const data = telemetry[printer.id]
-  const isPrinting = data && (data.gcode_state === 'RUNNING' || data.gcode_state === 'PRINTING')
-  const isPaused = data && data.gcode_state === 'PAUSE'
+function PrinterCard({ printer, data, onDelete, onPause, onResume, onStop }) {
+  const status = getEffectiveStatus(printer, data)
+  const isOnline = status !== "offline"
+  const isPrinting = status === "printing"
+  const isPaused = status === "paused"
   const [commandLoading, setCommandLoading] = useState(null)
-  
-  const handlePause = async () => {
-    setCommandLoading('pause')
+
+  const handleAction = async (actionName, handler) => {
+    setCommandLoading(actionName)
     try {
-      await onPause(printer.id)
+      await handler(printer.id)
     } finally {
       setCommandLoading(null)
     }
   }
-  
-  const handleResume = async () => {
-    setCommandLoading('resume')
-    try {
-      await onResume(printer.id)
-    } finally {
-      setCommandLoading(null)
-    }
-  }
-  
-  const handleStop = async () => {
-    setCommandLoading('stop')
-    try {
-      await onStop(printer.id)
-    } finally {
-      setCommandLoading(null)
-    }
-  }
-  
+
   return (
     <article className={styles.card}>
       <header className={styles.cardHead}>
@@ -84,53 +69,49 @@ function PrinterCard({ printer, telemetry, onDelete, onPause, onResume, onStop }
           <p className={styles.printerName}>{printer.name}</p>
           <p className={styles.printerModel}>{printer.ip}</p>
         </div>
-        <StatusBadge printer={printer} telemetry={telemetry} />
+        <StatusBadge status={status} />
       </header>
 
       <div className={styles.cardBody}>
-        {data ? (
-          <>
-            <div className={styles.telemetry}>
-              <div className={styles.tempItem}>
-                <span className={styles.tempLabel}>Nozzle</span>
-                <span className={styles.tempValue}>{data.nozzle_temp}°C</span>
-              </div>
-              <div className={styles.tempItem}>
-                <span className={styles.tempLabel}>Cama</span>
-                <span className={styles.tempValue}>{data.bed_temp}°C</span>
-              </div>
-              <div className={styles.tempItem}>
-                <span className={styles.tempLabel}>Progreso</span>
-                <span className={styles.tempValue}>{data.progress}%</span>
-              </div>
+        {isOnline && data ? (
+          <div className={styles.telemetry}>
+            <div className={styles.tempItem}>
+              <span className={styles.tempLabel}>Nozzle</span>
+              <span className={styles.tempValue}>{data.nozzle_temp ?? 0}°C</span>
             </div>
-          </>
+            <div className={styles.tempItem}>
+              <span className={styles.tempLabel}>Cama</span>
+              <span className={styles.tempValue}>{data.bed_temp ?? 0}°C</span>
+            </div>
+            <div className={styles.tempItem}>
+              <span className={styles.tempLabel}>Progreso</span>
+              <span className={styles.tempValue}>{data.progress ?? 0}%</span>
+            </div>
+          </div>
         ) : (
           <p className={styles.idleText}>
-            {printer.status === "offline"
-              ? "Sin conexión con la impresora."
-              : "Esperando conexión..."}
+            {status === "offline" ? "Sin conexión con la impresora." : "Esperando conexión..."}
           </p>
         )}
       </div>
 
       <footer className={styles.cardFoot}>
-        <button 
-          type="button" 
+        <button
+          type="button"
           className={styles.ghostBtn}
           onClick={() => onDelete(printer)}
           title="Eliminar impresora"
         >
           <BiTrash size={16} /> Eliminar
         </button>
-        
+
         {isPrinting && (
           <>
             <button
               type="button"
               className={styles.warningBtn}
-              onClick={handlePause}
-              disabled={commandLoading === 'pause'}
+              onClick={() => handleAction("pause", onPause)}
+              disabled={commandLoading === "pause"}
               title="Pausar impresión"
             >
               <BiPause size={16} /> Pausar
@@ -138,32 +119,43 @@ function PrinterCard({ printer, telemetry, onDelete, onPause, onResume, onStop }
             <button
               type="button"
               className={styles.dangerBtn}
-              onClick={handleStop}
-              disabled={commandLoading === 'stop'}
+              onClick={() => handleAction("stop", onStop)}
+              disabled={commandLoading === "stop"}
               title="Detener impresión"
             >
               <BiStopCircle size={16} /> Detener
             </button>
           </>
         )}
-        
+
         {isPaused && (
-          <button
-            type="button"
-            className={styles.successBtn}
-            onClick={handleResume}
-            disabled={commandLoading === 'resume'}
-            title="Reanudar impresión"
-          >
-            <BiPlay size={16} /> Reanudar
-          </button>
+          <>
+            <button
+              type="button"
+              className={styles.successBtn}
+              onClick={() => handleAction("resume", onResume)}
+              disabled={commandLoading === "resume"}
+              title="Reanudar impresión"
+            >
+              <BiPlay size={16} /> Reanudar
+            </button>
+            <button
+              type="button"
+              className={styles.dangerBtn}
+              onClick={() => handleAction("stop", onStop)}
+              disabled={commandLoading === "stop"}
+              title="Detener impresión"
+            >
+              <BiStopCircle size={16} /> Detener
+            </button>
+          </>
         )}
-        
+
         {!isPrinting && !isPaused && (
           <button
             type="button"
             className={styles.solidBtn}
-            disabled={!data || data.gcode_state === 'IDLE'}
+            disabled={status !== "idle"}
             title="Imprimir"
           >
             <BiPlay size={16} /> Imprimir
@@ -177,89 +169,50 @@ function PrinterCard({ printer, telemetry, onDelete, onPause, onResume, onStop }
 function Granja() {
   const { user } = useAuthContext()
   const { printers, loading: printersLoading, addPrinter, deletePrinter } = usePrinters(user?.id)
-  const telemetry = usePrinterRealtimeTelemetry(printers.map(p => p.id))
+
+  // Estabilizar el array de IDs para evitar re-suscripciones en cada render
+  const printerIds = useMemo(() => printers.map((p) => p.id), [printers])
+  const telemetry = usePrinterRealtimeTelemetry(printerIds)
+
   const [showAddModal, setShowAddModal] = useState(false)
   const [printerToDelete, setPrinterToDelete] = useState(null)
   const [deleting, setDeleting] = useState(false)
 
-  // Nota: Las impresoras se conectan globalmente en Inicio.jsx al arrancar la app
-  // No se reconectan en cada navegación para evitar múltiples conexiones
-
-  const counts = {
-    printing: printers.filter((p) => {
-      const data = telemetry[p.id]
-      return data && (data.gcode_state === 'RUNNING' || data.gcode_state === 'PRINTING')
-    }).length,
-    idle: printers.filter((p) => {
-      const data = telemetry[p.id]
-      // Si tiene telemetría y está idle/paused, o si está conectada pero sin telemetría aún
-      return (data && (data.gcode_state === 'IDLE' || data.gcode_state === 'PAUSE')) || (p.status !== 'offline' && !data)
-    }).length,
-    offline: printers.filter((p) => p.status === 'offline').length,
-  }
+  // Contadores calculados exactamente con la misma función de estado
+  const counts = useMemo(() => {
+    return printers.reduce(
+      (acc, p) => {
+        const status = getEffectiveStatus(p, telemetry[p.id])
+        if (status === "printing" || status === "paused") acc.printing += 1
+        else if (status === "idle") acc.idle += 1
+        else acc.offline += 1
+        return acc
+      },
+      { printing: 0, idle: 0, offline: 0 }
+    )
+  }, [printers, telemetry])
 
   const handleDeleteConfirm = async () => {
     if (!printerToDelete) return
-    
     try {
       setDeleting(true)
-      console.log(`[Granja] Eliminando impresora ${printerToDelete.id}...`)
-      
       const result = await deletePrinter(printerToDelete.id)
-      
-      if (result.success) {
-        console.log(`[Granja] ✓ Impresora ${printerToDelete.id} eliminada exitosamente`)
-        setPrinterToDelete(null)
-      } else {
-        console.error("[Granja] Error al eliminar:", result.error)
-      }
-    } catch (err) {
-      console.error("[Granja] Error en handleDeleteConfirm:", err)
+      if (result.success) setPrinterToDelete(null)
     } finally {
       setDeleting(false)
     }
   }
 
   const handlePause = async (printerId) => {
-    try {
-      console.log(`[Granja] Pausando impresora ${printerId}...`)
-      const result = await window.electron?.ipcRenderer?.invoke('printer:pause', printerId)
-      if (result?.success) {
-        console.log(`[Granja] ✓ Impresora pausada`)
-      } else {
-        console.error("[Granja] Error al pausar:", result?.error)
-      }
-    } catch (err) {
-      console.error("[Granja] Error en handlePause:", err)
-    }
+    await window.electron?.ipcRenderer?.invoke("printer:pause", printerId)
   }
 
   const handleResume = async (printerId) => {
-    try {
-      console.log(`[Granja] Reanudando impresora ${printerId}...`)
-      const result = await window.electron?.ipcRenderer?.invoke('printer:resume', printerId)
-      if (result?.success) {
-        console.log(`[Granja] ✓ Impresora reanudada`)
-      } else {
-        console.error("[Granja] Error al reanudar:", result?.error)
-      }
-    } catch (err) {
-      console.error("[Granja] Error en handleResume:", err)
-    }
+    await window.electron?.ipcRenderer?.invoke("printer:resume", printerId)
   }
 
   const handleStop = async (printerId) => {
-    try {
-      console.log(`[Granja] Deteniendo impresora ${printerId}...`)
-      const result = await window.electron?.ipcRenderer?.invoke('printer:stop', printerId)
-      if (result?.success) {
-        console.log(`[Granja] ✓ Impresora detenida`)
-      } else {
-        console.error("[Granja] Error al detener:", result?.error)
-      }
-    } catch (err) {
-      console.error("[Granja] Error en handleStop:", err)
-    }
+    await window.electron?.ipcRenderer?.invoke("printer:stop", printerId)
   }
 
   return (
@@ -313,10 +266,10 @@ function Granja() {
       ) : (
         <div className={styles.grid}>
           {printers.map((printer) => (
-            <PrinterCard 
-              key={printer.id} 
+            <PrinterCard
+              key={printer.id}
               printer={printer}
-              telemetry={telemetry}
+              data={telemetry[printer.id]}
               onDelete={setPrinterToDelete}
               onPause={handlePause}
               onResume={handleResume}

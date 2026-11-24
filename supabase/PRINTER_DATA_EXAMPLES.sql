@@ -1,2 +1,97 @@
--- Ejemplos de datos para printers con multi-protocolo\n-- Usar para testing y referencia\n\n-- ============================================================\n-- BAMBU LAB A1 (LAN local)\n-- ============================================================\nINSERT INTO printers (\n  user_id,\n  name,\n  ip,\n  protocol,\n  credentials,\n  agent_location,\n  status\n) VALUES (\n  (SELECT id FROM auth.users LIMIT 1), -- Ajustar según usuario real\n  'A1 Mini - Nave 1',\n  '192.168.0.100',\n  'bambu_lan',\n  jsonb_build_object(\n    'access_code', '4E5A4F36',\n    'serial_number', '0M11PC250134E9CE',\n    'model', 'A1'\n  ),\n  'nave-1',\n  'idle'\n) ON CONFLICT DO NOTHING;\n\n-- ============================================================\n-- BAMBU LAB P1S (LAN local, otra ubicación)\n-- ============================================================\nINSERT INTO printers (\n  user_id,\n  name,\n  ip,\n  protocol,\n  credentials,\n  agent_location,\n  status\n) VALUES (\n  (SELECT id FROM auth.users LIMIT 1),\n  'P1S - Nave 2',\n  '192.168.0.101',\n  'bambu_lan',\n  jsonb_build_object(\n    'access_code', '4E5A4F37',\n    'serial_number', '0M11PC250134E9CF',\n    'model', 'P1S'\n  ),\n  'nave-2',\n  'offline'\n) ON CONFLICT DO NOTHING;\n\n-- ============================================================\n-- KLIPPER/CREALITY (futuro - placeholder)\n-- ============================================================\n-- INSERT INTO printers (\n--   user_id,\n--   name,\n--   ip,\n--   protocol,\n--   credentials,\n--   agent_location,\n--   status\n-- ) VALUES (\n--   (SELECT id FROM auth.users LIMIT 1),\n--   'Creality K1 - Remote',\n--   '192.168.1.50',\n--   'klipper_moonraker',\n--   jsonb_build_object(\n--     'api_token', 'mkask_...',\n--     'model', 'K1',\n--     'firmware', 'Klipper'\n--   ),\n--   'remote-office',\n--   'idle'\n-- ) ON CONFLICT DO NOTHING;\n\n-- ============================================================\n-- Consultas útiles para testing\n-- ============================================================\n\n-- Ver todas las impresoras por protocolo\n-- SELECT name, protocol, ip, agent_location, status FROM printers;\n\n-- Ver detalles de credenciales para Bambu\n-- SELECT name, ip, credentials->>'access_code' as access_code, credentials->>'serial_number' as serial FROM printers WHERE protocol = 'bambu_lan';\n\n-- Ver impresoras por ubicación\n-- SELECT name, agent_location, status FROM printers WHERE agent_location = 'nave-1';\n\n-- Actualizar status de impresora\n-- UPDATE printers SET status = 'printing', updated_at = NOW() WHERE name = 'A1 Mini - Nave 1';\n\n-- Verificar estructura JSONB\n-- SELECT name, jsonb_pretty(credentials) FROM printers WHERE protocol = 'bambu_lan';\n"})
+-- Ejemplos de datos para printers con multi-protocolo
+-- Usar para testing y referencia
+
+-- ============================================================
+-- BAMBU LAB A1 (LAN local)
+-- ============================================================
+INSERT INTO printers (
+  user_id,
+  name,
+  ip,
+  protocol,
+  credentials,
+  agent_location,
+  status
+) VALUES (
+  (SELECT id FROM auth.users LIMIT 1), -- Ajustar según usuario real
+  'A1 Mini - Nave 1',
+  '192.168.0.100',
+  'bambu_lan',
+  jsonb_build_object(
+    'access_code', '4E5A4F36',
+    'serial_number', '0M11PC250134E9CE',
+    'model', 'A1'
+  ),
+  'nave-1',
+  'idle'
+) ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- BAMBU LAB P1S (LAN local, otra ubicación)
+-- ============================================================
+INSERT INTO printers (
+  user_id,
+  name,
+  ip,
+  protocol,
+  credentials,
+  agent_location,
+  status
+) VALUES (
+  (SELECT id FROM auth.users LIMIT 1),
+  'P1S - Nave 2',
+  '192.168.0.101',
+  'bambu_lan',
+  jsonb_build_object(
+    'access_code', '4E5A4F37',
+    'serial_number', '0M11PC250134E9CF',
+    'model', 'P1S'
+  ),
+  'nave-2',
+  'offline'
+) ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- KLIPPER/CREALITY (futuro - placeholder)
+-- ============================================================
+-- INSERT INTO printers (
+--   user_id,
+--   name,
+--   ip,
+--   protocol,
+--   credentials,
+--   agent_location,
+--   status
+-- ) VALUES (
+--   (SELECT id FROM auth.users LIMIT 1),
+--   'Creality K1 - Remote',
+--   '192.168.1.50',
+--   'klipper_moonraker',
+--   jsonb_build_object(
+--     'api_token', 'mkask_...',
+--     'model', 'K1',
+--     'firmware', 'Klipper'
+--   ),
+--   'remote-office',
+--   'idle'
+-- ) ON CONFLICT DO NOTHING;
+
+-- ============================================================
+-- Consultas útiles para testing
+-- ============================================================
+
+-- Ver todas las impresoras por protocolo
+-- SELECT name, protocol, ip, agent_location, status FROM printers;
+
+-- Ver detalles de credenciales para Bambu
+-- SELECT name, ip, credentials->>'access_code' as access_code, credentials->>'serial_number' as serial FROM printers WHERE protocol = 'bambu_lan';
+
+-- Ver impresoras por ubicación
+-- SELECT name, agent_location, status FROM printers WHERE agent_location = 'nave-1';
+
+-- Actualizar status de impresora
+-- UPDATE printers SET status = 'printing', updated_at = NOW() WHERE name = 'A1 Mini - Nave 1';
+
+-- Verificar estructura JSONB
+-- SELECT name, jsonb_pretty(credentials) FROM printers WHERE protocol = 'bambu_lan';\n"})
 </invoke>
